@@ -3,7 +3,6 @@ package grid.engine
 import collection.JavaConversions._
 import sys.process._
 import util._
-import xml.XML
 
 import com.sun.grid.jgdi._
 
@@ -15,7 +14,7 @@ object qfreeresources extends App with JGDI with Signal {
 
   // TODO psm_nfreectxts is custom
   // TODO make tracked resources customizable
-  val raf = monitoring.filter.ResourceAttributeFilter.parse("h_vmem,slots,psm_nfreectxts")
+  val raf = monitoring.filter.ResourceAttributeFilter.parse("h_vmem,slots,psm_nfreectxts,num_proc,mem_total")
   val qisummaryopts = new monitoring.QueueInstanceSummaryOptions
   qisummaryopts.setResourceAttributeFilter(raf)
 
@@ -40,22 +39,20 @@ object qfreeresources extends App with JGDI with Signal {
   }
 
   object QIFreeStatus {
-    private def qhostmemcmd(node: String) = s"""qhost -xml -h $node -F h_vmem"""
-
     def apply(qi: monitoring.QueueInstanceSummary): QIFreeStatus = {
       val name = qi.getName
       val state = qi.getState
-      val slots = qi.getResourceValue("hc", "slots").toInt
+      val slots = Option(qi.getResourceValue("hc", "slots")).getOrElse({
+        Console.err.println(s"""warning: $name: hc:slots undefined, falling back to num_proc""")
+        qi.getResourceValue("hl", "num_proc")
+      }).toInt
 
+      // TODO parse memory value
       def memPF(mem: String): Int = mem match {
-        case null if slots == 0 =>
-          0
-
         case null =>
-          // Console.err.println(s"working excluding $slots slots of $name because of null memory value")
-          val node = name.split("@")(1)
-          val xml = XML.loadString(qhostmemcmd(node).!!)
-          memPF((xml \\ "resourcevalue").text)
+          Console.err.println(s"""warning: $name: hc:h_vmem undefined, falling back to mem_total""")
+          val memTotal = qi.getResourceValue("hl", "mem_total")
+          memTotal.dropRight(1).toDouble.floor.toInt
 
         case "0.000" =>
           0
