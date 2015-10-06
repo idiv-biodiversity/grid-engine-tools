@@ -3,7 +3,7 @@ package grid.engine
 import sys.process._
 import xml.XML
 
-object qquotanice extends App {
+object qquotanice extends App with Memory {
   val qquota = """qquota -xml -u *"""
 
   val xml = XML.loadString(qquota.!!)
@@ -36,6 +36,17 @@ object qquotanice extends App {
     }
   }
 
+  case class MemoryEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
+    lazy val limit: Double = Memory.dehumanize(prettyLimit)
+    lazy val value: Double = Memory.dehumanize(prettyValue)
+
+    override def toString: String = {
+      val color = colorFor(limit, value)
+
+      f"""$color$user%-8s $resource%10s $prettyValue%15s $prettyLimit%15s${Console.RESET}"""
+    }
+  }
+
   case class TimeEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
     lazy val limit: Double = {
       val tokens = prettyLimit.split(":").toList.map(_.toLong).reverse
@@ -65,6 +76,7 @@ object qquotanice extends App {
   } yield {
     val entry = resource match {
       case "h_rt" => new TimeEntry(user, resource, limit, value)
+      case "h_vmem" => new MemoryEntry(user, resource, limit, value)
       case "slots" => new NumberEntry(user, resource, limit.toDouble, value.toDouble)
     }
 
