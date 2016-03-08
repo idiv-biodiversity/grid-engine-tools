@@ -16,12 +16,7 @@ object qjutil extends App with Signal {
     val lower = 0.8
     val upper = 1.01
     val tolerance = 0
-    val user = {
-      var user = sys props "user.name"
-      if (user == "root")
-        user = "*"
-      user
-    }
+    val user = sys.props get "user.name" filter { _ != "root" } getOrElse "*"
   }
 
   // -----------------------------------------------------------------------------------------------
