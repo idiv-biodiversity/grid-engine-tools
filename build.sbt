@@ -33,7 +33,7 @@ scripts := {
         |""".stripMargin
 
   (discoveredMainClasses in Compile).value foreach { clazz =>
-    val app = clazz.drop(clazz.lastIndexOf(".") + 1)
+    val app = clazz.drop(clazz.lastIndexOf(".") + 1).replaceAll("\\$minus", "-")
     val s = scriptDir / app
     IO.write(s, script(clazz))
   }
