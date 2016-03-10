@@ -3,7 +3,7 @@ package grid.engine
 import sys.process._
 import xml.XML
 
-object qquotanice extends App with Memory {
+object `qquota-nice` extends App with Memory {
   val qquota = """qquota -xml -u *"""
 
   val xml = XML.loadString(qquota.!!)
