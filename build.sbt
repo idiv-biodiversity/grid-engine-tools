@@ -1,10 +1,10 @@
+enablePlugins(GitVersioning)
+
 import sbt._
 import Keys._
 import Process._
 
 name := "grid-engine-tools"
-
-version := "0.2.0-SNAPSHOT"
 
 scalaVersion := "2.11.7"
 
