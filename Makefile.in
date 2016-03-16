@@ -31,3 +31,5 @@ install: scripts
 
 clean:
 	rm -rf assembly target project/project project/target
+
+.PHONY: all clean default deps install scripts
