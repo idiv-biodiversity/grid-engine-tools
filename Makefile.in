@@ -28,6 +28,8 @@ install: scripts
 	for script in $(notdir $(basename $(wildcard target/scripts/*))) ; do \
 	  install -Dm755 target/scripts/$$script $(DESTDIR)$(bindir)/$$script ; \
 	done
+	install -Dm644 LICENSE $(DESTDIR)$(pkgdatadir)/LICENSE
+	install -Dm644 NOTICE.md $(DESTDIR)$(pkgdatadir)/NOTICE.md
 
 clean:
 	rm -rf assembly target project/project project/target
