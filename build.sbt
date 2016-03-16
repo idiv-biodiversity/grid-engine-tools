@@ -6,7 +6,7 @@ import Process._
 
 name := "grid-engine-tools"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.5"
 
