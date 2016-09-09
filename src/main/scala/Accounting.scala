@@ -34,7 +34,7 @@ trait Accounting {
     buf.toIterator
   }
 
-  val success = (job: Iterable[String]) => {
+  val success: (Iterable[String]) => Boolean = { job =>
     def a = job exists { line =>
       val split = line.split(" ").filter(_.nonEmpty)
       split.head == "exit_status" && split.last == "0"
