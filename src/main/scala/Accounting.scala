@@ -11,7 +11,7 @@ trait Accounting {
     io.Source.stdin.getLines
 
   // TODO this is inefficient in memory processing, will explode with large accounting databases
-  def grouped(filter: Iterable[String] => Boolean): Iterator[List[String]] = {
+  def grouped: Iterator[List[String]] = {
     import collection.mutable.ListBuffer
 
     val buf = ListBuffer[List[String]]()
@@ -19,7 +19,7 @@ trait Accounting {
 
     accounting foreach { line =>
       if (line.startsWith(seperatorLine)) {
-        if (cur.nonEmpty && filter(cur))
+        if (cur.nonEmpty)
           buf += cur.toList
 
         cur = new ListBuffer[String]()
@@ -34,7 +34,10 @@ trait Accounting {
     buf.toIterator
   }
 
-  val success: (Iterable[String]) => Boolean = { job =>
+  def failure(job: (Iterable[String])): Boolean =
+    !success(job)
+
+  def success(job: Iterable[String]): Boolean = {
     def a = job exists { line =>
       val split = line.split(" ").filter(_.nonEmpty)
       split.head == "exit_status" && split.last == "0"
@@ -48,7 +51,10 @@ trait Accounting {
     a && b
   }
 
+  def failed: Iterator[List[String]] =
+    grouped filter failure
+
   def successful: Iterator[List[String]] =
-    grouped(success)
+    grouped filter success
 
 }
