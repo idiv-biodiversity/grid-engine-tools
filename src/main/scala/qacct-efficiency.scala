@@ -1,6 +1,6 @@
 package grid.engine
 
-object `qacct-efficiency` extends App with Signal {
+object `qacct-efficiency` extends App with Accounting with Signal {
 
   exit on SIGPIPE
 
@@ -24,8 +24,6 @@ object `qacct-efficiency` extends App with Signal {
   // -----------------------------------------------------------------------------------------------
   // main
   // -----------------------------------------------------------------------------------------------
-
-  def accounting = io.Source.stdin.getLines
 
   def filtered = accounting filter { line =>
     val first = line.split(" ").filter(_.nonEmpty)(0)
