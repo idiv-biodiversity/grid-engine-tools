@@ -48,14 +48,14 @@ object `qquota-nice` extends App with Memory {
   }
 
   case class TimeEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
-    lazy val limit: Double = {
+    lazy val limit = {
       val tokens = prettyLimit.split(":").toList.map(_.toLong).reverse
-      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum
+      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
     }
 
-    lazy val value: Double = {
+    lazy val value = {
       val tokens = prettyValue.split(":").toList.map(_.toLong).reverse
-      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum
+      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
     }
 
     override def toString: String = {
