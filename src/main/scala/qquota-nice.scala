@@ -4,7 +4,54 @@ import sys.process._
 import xml.XML
 
 object `qquota-nice` extends App with Memory {
-  val qquota = """qquota -xml -u *"""
+
+  // -----------------------------------------------------------------------------------------------
+  // help / usage
+  // -----------------------------------------------------------------------------------------------
+
+  if (List("-?", "-h", "-help", "--help") exists args.contains) {
+    Console.println(s"""
+      |Usage: qquota-nice
+      |
+      |Displays a human readable qquota output.
+      |
+      |  -? | -h | -help | --help            print this help
+      |  -u user                             only print quota for user
+    """.stripMargin)
+    sys exit 0
+  }
+
+  // -------------------------------------------------------------------------------------------------
+  // config
+  // -------------------------------------------------------------------------------------------------
+
+  case class Conf(users: List[String])
+
+  val conf = {
+    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
+      case Nil =>
+        conf
+
+      case "-u" :: user :: tail =>
+        accumulate(conf.copy(users = user :: conf.users))(tail)
+
+      case x :: tail =>
+        Console.err.println(s"""Don't know what to do with argument "$x".""")
+        accumulate(conf)(tail)
+    }
+
+    accumulate(Conf(Nil))(args.toList)
+  }
+
+  val qquota = if (conf.users.nonEmpty)
+    s"""qquota -xml -u ${conf.users.mkString(",")}"""
+  else
+    "qquota -xml"
+
+
+  // -----------------------------------------------------------------------------------------------
+  // main
+  // -----------------------------------------------------------------------------------------------
 
   val xml = XML.loadString(qquota.!!)
 
