@@ -21,7 +21,6 @@ Install to default prefix `/usr/local`:
     ./configure
     make install
 
-Install to custom prefix directory:
+Configure a custom prefix directory:
 
-    ./autogen.sh
     ./configure --prefix=/usr
