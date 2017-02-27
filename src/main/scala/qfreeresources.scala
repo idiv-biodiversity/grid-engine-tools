@@ -1,9 +1,6 @@
 package grid.engine
 
 import collection.JavaConversions._
-import sys.process._
-import util._
-
 import com.sun.grid.jgdi._
 
 object qfreeresources extends App with JGDI with Signal {

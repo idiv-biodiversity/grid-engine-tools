@@ -1,6 +1,6 @@
 package grid.engine
 
-object `qacct-efficiency` extends App with Signal {
+object `qacct-efficiency` extends App with Accounting with Signal {
 
   exit on SIGPIPE
 
@@ -17,17 +17,46 @@ object `qacct-efficiency` extends App with Signal {
       |    efficiency = cpu / slots / ru_wallclock * 100%
       |
       |  -? | -h | -help | --help            print this help
+      |  -s | --success                      only print efficiencies for successful jobs
     """.stripMargin)
     sys exit 0
+  }
+
+  // -------------------------------------------------------------------------------------------------
+  // config
+  // -------------------------------------------------------------------------------------------------
+
+  case class Conf(successful: Boolean)
+
+  val conf = {
+    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
+      case Nil =>
+        conf
+
+      case "-s" :: tail =>
+        accumulate(conf.copy(successful = true))(tail)
+
+      case "--success" :: tail =>
+        accumulate(conf.copy(successful = true))(tail)
+
+      case _ :: tail =>
+        // silently ignore
+        accumulate(conf)(tail)
+    }
+
+    accumulate(Conf(false))(args.toList)
   }
 
   // -----------------------------------------------------------------------------------------------
   // main
   // -----------------------------------------------------------------------------------------------
 
-  def accounting = io.Source.stdin.getLines
+  def prefiltered = if (conf.successful)
+    successful.flatten
+  else
+    accounting
 
-  def filtered = accounting filter { line =>
+  def filtered = prefiltered filter { line =>
     val first = line.split(" ").filter(_.nonEmpty)(0)
     first == "slots" || first == "ru_wallclock" || first == "cpu"
   }
