@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([grid-engine-tools], [0.3.0], [https://github.com/wookietreiber/grid-engine-tools/issues])
+AC_INIT([grid-engine-tools], [0.3.1], [https://github.com/wookietreiber/grid-engine-tools/issues])
 
 # Checks for programs.
 AC_PROG_AWK
