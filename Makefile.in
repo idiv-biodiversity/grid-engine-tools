@@ -21,13 +21,17 @@ scripts: deps
 	sbt scripts
 
 install: scripts
-	install -Dm755 assembly/$(package).jar $(DESTDIR)$(pkgdatadir)/$(package).jar
+	install -Dm644 assembly/$(package).jar $(DESTDIR)$(pkgdatadir)/$(package).jar
 	for script in $(notdir $(basename $(wildcard src/main/bash/*))) ; do \
 	  install -Dm755 src/main/bash/$$script.sh $(DESTDIR)$(bindir)/$$script ; \
 	done
 	for script in $(notdir $(basename $(wildcard target/scripts/*))) ; do \
 	  install -Dm755 target/scripts/$$script $(DESTDIR)$(bindir)/$$script ; \
 	done
+	install -Dm644 LICENSE $(DESTDIR)$(pkgdatadir)/LICENSE
+	install -Dm644 NOTICE.md $(DESTDIR)$(pkgdatadir)/NOTICE.md
 
 clean:
 	rm -rf assembly target project/project project/target
+
+.PHONY: all clean default deps install scripts

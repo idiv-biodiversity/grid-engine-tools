@@ -1,12 +1,12 @@
+enablePlugins(GitVersioning)
+
 import sbt._
 import Keys._
 import Process._
 
 name := "grid-engine-tools"
 
-version := "0.1.0"
-
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.5"
 
@@ -29,11 +29,11 @@ scripts := {
 
   def script(clazz: String) =
     s"""|#!/bin/sh
-        |java -cp "${prefix}/share/grid-engine-tools/grid-engine-tools.jar:$$SGE_ROOT/lib/jgdi.jar" $clazz
+        |java -cp "${prefix}/share/grid-engine-tools/grid-engine-tools.jar:$$SGE_ROOT/lib/jgdi.jar" '$clazz' "$$@"
         |""".stripMargin
 
   (discoveredMainClasses in Compile).value foreach { clazz =>
-    val app = clazz.drop(clazz.lastIndexOf(".") + 1)
+    val app = clazz.drop(clazz.lastIndexOf(".") + 1).replaceAll("\\$minus", "-")
     val s = scriptDir / app
     IO.write(s, script(clazz))
   }
