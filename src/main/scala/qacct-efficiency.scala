@@ -39,8 +39,8 @@ object `qacct-efficiency` extends App with Accounting with Signal {
       case "--success" :: tail =>
         accumulate(conf.copy(successful = true))(tail)
 
-      case _ :: tail =>
-        // silently ignore
+      case x :: tail =>
+        Console.err.println(s"""Don't know what to do with argument "$x".""")
         accumulate(conf)(tail)
     }
 
