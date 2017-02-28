@@ -1,16 +1,16 @@
 #!/bin/bash
 
 usage() {
-  echo "usage: $(basename $0 .sh) < -u user | -j jobid >"
+  echo "usage: $(basename $0 .sh) {-u user|-j jobid}"
 }
 
 # ------------------------------------------------------------------------------
 # options
 # ------------------------------------------------------------------------------
 
-while getopts hj:u: param ; do
+while getopts h?j:u: param ; do
   case $param in
-    h)
+    h|?)
       usage
       exit 0
       ;;
@@ -20,7 +20,7 @@ while getopts hj:u: param ; do
     u)
       export GE_USER="$OPTARG"
       ;;
-    ?)
+    *)
       usage >&2
       exit 1
       ;;
@@ -39,7 +39,7 @@ done
 qconf -sel |
 parallel --tag "qhost -xml -j -h" |
 if [[ -n $GE_USER ]] ; then
-  awk '/job_owner/ && />$GE_USER</ { print $1 }'
+  awk "/job_owner/ && />$GE_USER</ { print \$1 }"
 else
   awk "/jobid='$GE_JOB_ID'/ { print \$1 }"
 fi |
