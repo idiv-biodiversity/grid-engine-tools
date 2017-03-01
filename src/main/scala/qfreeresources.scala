@@ -1,6 +1,6 @@
 package grid.engine
 
-import collection.JavaConversions._
+import collection.JavaConverters._
 import com.sun.grid.jgdi._
 
 object qfreeresources extends App with JGDI with Signal {
@@ -15,7 +15,7 @@ object qfreeresources extends App with JGDI with Signal {
   val qisummaryopts = new monitoring.QueueInstanceSummaryOptions
   qisummaryopts.setResourceAttributeFilter(raf)
 
-  JGDI.getQueueInstanceSummary(qisummaryopts).getQueueInstanceSummary.map(QIFreeStatus(_)) filter { status =>
+  JGDI.getQueueInstanceSummary(qisummaryopts).getQueueInstanceSummary.asScala.map(QIFreeStatus(_)) filter { status =>
     import status._
     slots > 0 && h_vmem_g > 0 && gPerCore > 0 && !state.contains("u") && !state.contains("d")
   } sortBy { - _.slots } foreach println
