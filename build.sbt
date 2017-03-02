@@ -40,3 +40,5 @@ scripts := {
 }
 
 scripts <<= scripts dependsOn assembly
+
+fork in run := true
