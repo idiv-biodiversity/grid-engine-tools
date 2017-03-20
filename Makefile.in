@@ -32,6 +32,6 @@ install: scripts
 	install -Dm644 NOTICE.md $(DESTDIR)$(pkgdatadir)/NOTICE.md
 
 clean:
-	rm -rf assembly target project/project project/target
+	rm -rf assembly lib project/project project/target target
 
 .PHONY: all clean default deps install scripts
