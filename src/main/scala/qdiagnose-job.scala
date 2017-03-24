@@ -49,7 +49,7 @@ object `qdiagnose-job` extends App with Environment {
   implicit val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
       case Nil =>
-        conf
+        conf.copy(ids = conf.ids.reverse)
 
       case "-q" :: tail =>
         accumulate(conf.copy(verbosity = Verbosity.Quiet))(tail)
@@ -263,7 +263,7 @@ object `qdiagnose-job` extends App with Environment {
     qmaster map { "qmaster " + _ } foreach println
   }
 
-  for (id <- conf.ids.reverse) {
+  for (id <- conf.ids) {
     val qstat = checking("active job database")(checkQstat(id))
     val qacct = checking("accounting database")(checkQacct(id))
     val execd = checking("execution daemon messages")(checkExecd(id))

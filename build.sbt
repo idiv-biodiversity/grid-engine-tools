@@ -9,6 +9,7 @@ name := "grid-engine-tools"
 scalaVersion := "2.12.1"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
+libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.10"
 
 assemblyJarName in assembly := "grid-engine-tools.jar"
 
