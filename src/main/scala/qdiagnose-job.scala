@@ -1,6 +1,7 @@
 package grid.engine
 
 import sys.process._
+import util.{ Try, Success, Failure }
 import xml._
 
 object `qdiagnose-job` extends App with Environment {
@@ -107,7 +108,7 @@ object `qdiagnose-job` extends App with Environment {
       Seq()
   }
 
-  case class QacctInfo(job: String, task: String, failed: String, exit: String) {
+  case class QacctInfo(job: String, task: Int, failed: String, exit: String) {
     def isFailure: Boolean =
       !isSuccess
 
@@ -116,14 +117,12 @@ object `qdiagnose-job` extends App with Environment {
         exit == "0"
 
     override def toString: String = {
-      val t = if (task == "undefined") "1" else task
-
       if (isSuccess)
-        s"""$job.$t was successful"""
+        s"""$job.$task was successful"""
       else if (failed.split(" ").headOption.exists(_ == "100") && exit.toInt > 128)
-        s"""$job.$t received signal ${exit.toInt - 128}"""
+        s"""$job.$task received signal ${exit.toInt - 128}"""
       else
-        s"""$job.$t exit: $exit failed: $failed"""
+        s"""$job.$task exit: $exit failed: $failed"""
     }
   }
 
@@ -139,9 +138,18 @@ object `qdiagnose-job` extends App with Environment {
 
     raw.grouped(3).collect({
       case Seq(task, failed, exit) =>
+        val traw = task.split(" ").filter(_.nonEmpty).drop(1).mkString(" ")
+        val t = Try(traw.toInt) match {
+          case Success(v) =>
+            v
+          case Failure(e) =>
+            if (traw != "undefined") Console.err.println(e.getMessage)
+            1
+        }
+
         QacctInfo (
           job    = id,
-          task   = task  .split(" ").filter(_.nonEmpty).drop(1).mkString(" "),
+          task   = t,
           failed = failed.split(" ").filter(_.nonEmpty).drop(1).mkString(" "),
           exit   = exit  .split(" ").filter(_.nonEmpty).drop(1).mkString(" ")
         )
@@ -256,16 +264,27 @@ object `qdiagnose-job` extends App with Environment {
   // main
   // -----------------------------------------------------------------------------------------------
 
+  def shortenQacct(qacct: Seq[QacctInfo]): Seq[String] = for {
+    (success,jobs) <- Utils.group(qacct)(_.isSuccess)
+
+    (task, verb, failure) = jobs.size match {
+      case 1 => (s"${jobs.head.task}",                   "was",  "a failure")
+      case n => (s"${jobs.head.task}-${jobs.last.task}", "were", "failures")
+    }
+  } yield
+    if (success) s"${jobs.head.job}.$task $verb successful"
+    else         s"${jobs.head.job}.$task $verb $failure"
+
   def printFull(qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Unit = {
     qstat map { "qstat " + _ } foreach println
-    qacct map { "qacct " + _ } foreach println
+    shortenQacct(qacct) map { "qacct " + _ } foreach println
     execd map { "execd " + _ } foreach println
     qmaster map { "qmaster " + _ } foreach println
   }
 
   for (id <- conf.ids) {
     val qstat = checking("active job database")(checkQstat(id))
-    val qacct = checking("accounting database")(checkQacct(id))
+    val qacct = checking("accounting database")(checkQacct(id)).sortBy(_.task)
     val execd = checking("execution daemon messages")(checkExecd(id))
     val qmaster = checking("master daemon messages")(checkQmaster(id))
 
@@ -315,7 +334,7 @@ object `qdiagnose-job` extends App with Environment {
                     |The base command used to fetch this information was: `qacct -j $id`
                     |
                     |```
-                    |${qacct.mkString("\n")}
+                    |${shortenQacct(qacct).mkString("\n")}
                     |```
                     |
                     |""".stripMargin)
