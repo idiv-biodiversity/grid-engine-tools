@@ -238,6 +238,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
         if ! (log matches """reaping job "\d+" job usage retrieval complains: Job does not exist""")
         if ! (log matches """removing unreferenced job \d+\.\d+ without job report from ptf""")
         if ! (log matches """spooling job \d+\.\d+ took \d+ seconds""")
+        if ! (log matches """sending job .+ mail to user .+""")
         message = classify(log)
       } yield message
 
