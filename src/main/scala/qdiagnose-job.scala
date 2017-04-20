@@ -19,7 +19,6 @@ object `qdiagnose-job` extends App with Environment {
                 |  -q                                  quiet - less output
                 |  -v                                  verbose - more output
                 |  -? | -h | -help | --help            print this help
-                |  --mail                              output suitable for mail tools like Markdown Here
                 |""".stripMargin)
     sys exit 0
   }
@@ -192,13 +191,14 @@ object `qdiagnose-job` extends App with Environment {
     for {
       line <- cmd.lineStream
       if ! (line matches """.+\|removing trigger to terminate job \d+\.\d+""")
-      if ! (line matches """.+\|job \d+\.\d+ finished on host [^ ]+""")
       if ! (line matches """.+\|task .+ at .+ of job \d+\.\d+ finished""")
       if ! (line matches """.+\|dispatching job .+ took .+ \(reservation=true\)""")
       if ! (line matches """.+\|scheduler tries to change tickets of a non running job \d+ task \d+\(state 0\)""")
       if ! (line matches """.+\|\w+@\S+ modified "\d+" in Job list""")
       if ! (line matches """.+\|ignoring start order of jobs \d+\.\d+ because it was modified""")
+      if ! (line matches """.+\|job \d+\.\d+ finished on host [^ ]+""")
       if ! (line matches """.+\|job \d+\.\d+ is already in deletion""")
+      if ! (line matches """.+\|job \d+\.\d+ should have finished since \d+s""")
       // category: has nothing to do with job
       if ! (line matches """.+\|P\|PROF:.+""")
       if ! (line matches """.+\|commlib info: got [^ ]+ error.+""")
@@ -212,6 +212,11 @@ object `qdiagnose-job` extends App with Environment {
   }
 
   def analyze(id: String, qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
+    val checklogs = qacct collect {
+      case QacctInfo(job, task, failed, exit) if failed == "0" && exit != "0" =>
+        s"""job $job.$task exited with an error: check your log/output/error files to find out what went wrong"""
+    }
+
     val h_rt = """.*job (\d+\.\d+) exceeded hard wallclock time.*""".r
     val h_vmem = """.*job (\d+\.\d+) exceeds job master hard limit "h_vmem".*""".r
 
@@ -257,7 +262,7 @@ object `qdiagnose-job` extends App with Environment {
     else
       Nil
 
-    rs ++ es ++ qs
+    checklogs ++ rs ++ es ++ qs
   }
 
   // -----------------------------------------------------------------------------------------------
