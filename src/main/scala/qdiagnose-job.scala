@@ -212,6 +212,11 @@ object `qdiagnose-job` extends App with Environment {
   }
 
   def analyze(id: String, qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
+    val checklogs = qacct collect {
+      case QacctInfo(job, task, failed, exit) if failed == "0" && exit != "0" =>
+        s"""job $job.$task exited with an error: check your log/output/error files to find out what went wrong"""
+    }
+
     val h_rt = """.*job (\d+\.\d+) exceeded hard wallclock time.*""".r
     val h_vmem = """.*job (\d+\.\d+) exceeds job master hard limit "h_vmem".*""".r
 
@@ -257,7 +262,7 @@ object `qdiagnose-job` extends App with Environment {
     else
       Nil
 
-    rs ++ es ++ qs
+    checklogs ++ rs ++ es ++ qs
   }
 
   // -----------------------------------------------------------------------------------------------
