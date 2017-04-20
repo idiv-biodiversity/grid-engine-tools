@@ -380,8 +380,12 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
         for {
           (state, explanations) <- stateExplanations
           if state != QueueState.ok // TODO make configurable
-          explanation <- explanations
-        } println(s"$qi $state $explanation")
+        } {
+          if (explanations.isEmpty)
+            println(s"$qi $state")
+          else for (explanation <- explanations)
+            println(s"$qi $state $explanation")
+        }
 
         if (needsJobMessage(stateExplanations)) {
           val jobmessage = if (jobs.isEmpty)
@@ -398,11 +402,15 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
 
       case Output.Nagios =>
         val combined = for {
-          (state, explanation) <- stateExplanations
+          (state, explanations) <- stateExplanations
           if state != QueueState.ok
-          message = explanation.mkString(start = "(", sep = ", ", end = ")")
-        } yield
-          s"""state=$state $message"""
+        } yield {
+          if (explanations.nonEmpty) {
+            val message = explanations.mkString(start = "(", sep = ", ", end = ")")
+            s"""state=$state $message"""
+          } else
+            s"""state=$state"""
+        }
 
         val jobMessages = if (needsJobMessage(stateExplanations)) {
           val message = if (jobs.isEmpty)
