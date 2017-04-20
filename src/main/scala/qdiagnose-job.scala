@@ -19,7 +19,6 @@ object `qdiagnose-job` extends App with Environment {
                 |  -q                                  quiet - less output
                 |  -v                                  verbose - more output
                 |  -? | -h | -help | --help            print this help
-                |  --mail                              output suitable for mail tools like Markdown Here
                 |""".stripMargin)
     sys exit 0
   }
