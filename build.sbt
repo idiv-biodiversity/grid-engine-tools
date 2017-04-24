@@ -6,10 +6,10 @@ import Process._
 
 name := "grid-engine-tools"
 
-scalaVersion := "2.12.1"
+scalaVersion := "2.12.2"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
-libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.10"
+libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.12"
 
 assemblyJarName in assembly := "grid-engine-tools.jar"
 
@@ -40,6 +40,6 @@ scripts := {
   }
 }
 
-scripts <<= scripts dependsOn assembly
+scripts := (scripts dependsOn assembly).value
 
 fork in run := true
