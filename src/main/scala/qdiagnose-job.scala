@@ -115,7 +115,7 @@ object `qdiagnose-job` extends App with Environment {
       failed == "0" &&
         exit == "0"
 
-    override def toString: String = {
+    override def toString = {
       if (isSuccess)
         s"""$job.$task was successful"""
       else if (failed.split(" ").headOption.exists(_ == "100") && exit.toInt > 128)

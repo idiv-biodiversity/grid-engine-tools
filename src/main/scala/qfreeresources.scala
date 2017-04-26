@@ -29,7 +29,7 @@ object qfreeresources extends App with JGDI with Signal {
   case class QIFreeStatus(name: String, state: String, slots: Int, h_vmem_g: Int, psm_nfreectxts: Int) {
     lazy val gPerCore = h_vmem_g / slots
 
-    override def toString: String = {
+    override def toString = {
       val color = if (gPerCore >= 5) Console.GREEN else ""
       f"""$color$name%24s   $slots%6d   $h_vmem_g%6dG   ~$gPerCore%5dG/core   $psm_nfreectxts%4d${Console.RESET}"""
     }

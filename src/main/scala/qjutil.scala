@@ -117,7 +117,7 @@ object qjutil extends App with Signal {
   // -----------------------------------------------------------------------------------------------
 
   case class Job (jid: Int, tid: String) {
-    override def toString: String =
+    override def toString =
       if (tid.isEmpty) s"""$jid""" else s"""$jid.$tid"""
   }
 
