@@ -56,5 +56,6 @@ object qjend extends App {
   // util
   // -------------------------------------------------------------------------------------------------
 
-  def emptyStringOption(s: String) = if (s.isEmpty) None else Some(s)
+  def emptyStringOption(s: String): Option[String] =
+    if (s.isEmpty) None else Some(s)
 }

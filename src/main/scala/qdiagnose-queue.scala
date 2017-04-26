@@ -82,7 +82,8 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
 
   case class Conf(output: Output, hosts: List[String], qis: List[QueueInstance])
   object Conf {
-    def default = Conf(Output.CLI, Nil, Nil)
+    def default: Conf =
+      Conf(Output.CLI, Nil, Nil)
   }
 
   implicit val conf: Conf = {
@@ -309,7 +310,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   }
 
   // TODO make configurable
-  def severity(state: QueueState) = state match {
+  def severity(state: QueueState): Severity = state match {
     case QueueState.ok        => Severity.OK
     case QueueState.disabled  => Severity.WARNING
     case QueueState.error     => Severity.CRITICAL

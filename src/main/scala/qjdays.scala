@@ -14,9 +14,13 @@ object qjdays extends App {
     }
   }
 
-  def emptyStringOption(s: String) = if (s.isEmpty) None else Some(s)
+  def emptyStringOption(s: String): Option[String] =
+    if (s.isEmpty) None else Some(s)
 
-  def jobIDs = ("""qstat -s r -u *""" #| Seq("awk", "NR > 2 { print $1 }") #| """sort -u""").lineStream.par
+  def jobIDs: Stream[String] =
+    ("""qstat -s r -u *"""             #|
+     Seq("awk", "NR > 2 { print $1 }") #|
+     """sort -u""").lineStream
 
   def jobAnalysis(id: String): Option[ADT] = for {
     qstatjxml <- Try(XML.loadString(s"""qstat -j $id -xml""".!!)) match {

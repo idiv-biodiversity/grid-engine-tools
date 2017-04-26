@@ -43,7 +43,8 @@ object qload extends App with Signal {
 
   object Conf {
     object Double {
-      def unapply(s: String) = Try(s.toDouble).toOption
+      def unapply(s: String): Option[Double] =
+        Try(s.toDouble).toOption
     }
   }
 

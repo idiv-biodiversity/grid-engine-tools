@@ -65,11 +65,13 @@ object qjutil extends App with Signal {
 
   object Conf {
     object Int {
-      def unapply(s: String) = Try(s.toInt).toOption
+      def unapply(s: String): Option[Int] =
+        Try(s.toInt).toOption
     }
 
     object Double {
-      def unapply(s: String) = Try(s.toDouble).toOption
+      def unapply(s: String): Option[Double] =
+        Try(s.toDouble).toOption
     }
   }
 
@@ -115,11 +117,15 @@ object qjutil extends App with Signal {
   // -----------------------------------------------------------------------------------------------
 
   case class Job (jid: Int, tid: String) {
-    override def toString = if (tid.isEmpty) s"""$jid""" else s"""$jid.$tid"""
+    override def toString: String =
+      if (tid.isEmpty) s"""$jid""" else s"""$jid.$tid"""
   }
 
-  val qstat = s"""qstat -xml -s r -u ${conf.user}"""
-  def qstatj(id: Int) = s"""qstat -xml -j $id"""
+  val qstat =
+    s"""qstat -xml -s r -u ${conf.user}"""
+
+  def qstatj(id: Int): String =
+    s"""qstat -xml -j $id"""
 
   val qstatxml = XML.loadString(qstat.!!)
 

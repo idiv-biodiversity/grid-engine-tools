@@ -51,22 +51,22 @@ object `qacct-efficiency` extends App with Accounting with Signal {
   // main
   // -----------------------------------------------------------------------------------------------
 
-  def prefiltered = if (conf.successful)
+  def prefiltered: Iterator[String] = if (conf.successful)
     successful.flatten
   else
     accounting
 
-  def filtered = prefiltered filter { line =>
+  def filtered: Iterator[String] = prefiltered filter { line =>
     val first = line.split(" ").filter(_.nonEmpty)(0)
     first == "slots" || first == "ru_wallclock" || first == "cpu"
   }
 
-  def slotsWallclockCPU = filtered.map({ line =>
+  def slotsWallclockCPU: Iterator[Seq[Double]] = filtered.map({ line =>
     line.split(" ").filter(_.nonEmpty).last.toDouble
   }).grouped(3)
 
-  def efficiencies = slotsWallclockCPU.map({
-    case slots :: wallclock :: cpu :: Nil =>
+  def efficiencies: Iterator[Double] = slotsWallclockCPU.map({
+    case Seq(slots, wallclock, cpu) =>
       (cpu / slots / wallclock * 10000).round / 100.0
 
     case _ =>
