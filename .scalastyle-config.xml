@@ -1,0 +1,13 @@
+<scalastyle>
+
+  <name>Grid Engine Tools - Scala Style Specification</name>
+
+  <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
+
+  <check level="warning" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true">
+    <parameters>
+      <parameter name="ignoreOverride">true</parameter>
+    </parameters>
+  </check>
+
+</scalastyle>
