@@ -39,7 +39,9 @@ object qwaiterstats extends App with Signal {
 
   val cmd = projectArg match {
     case Some(project) =>
+      // scalastyle:off
       "qstat -ext -s p -u *" #| Seq("awk","""NR > 2 && $6 == "%s" && $8 !~ /^(h|E)qw$/ { print $5, $15, $16 }""".format(project))
+      // scalastyle:on
 
     case None =>
       "qstat -s p -u *" #| Seq("awk","NR > 2 && $5 !~ /^(h|E)qw$/ { print $4, $8, $9 }")

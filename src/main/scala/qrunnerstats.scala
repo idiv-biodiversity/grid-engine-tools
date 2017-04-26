@@ -34,7 +34,9 @@ object qrunnerstats extends App {
 
   val cmd = projectArg match {
     case Some(project) =>
+      // scalastyle:off
       "qstat -ext -s r -u *" #| Seq("awk","""NR > 2 && $6 == "%s" { print $5, $19 }""".format(project))
+      // scalastyle:on
 
     case None =>
       "qstat -s r -u *" #| Seq("awk","NR > 2 { print $4, $9 }")

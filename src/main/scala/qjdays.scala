@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.all._
 import sys.process._
 import util.{Try, Success, Failure}
 import xml._
@@ -31,7 +32,7 @@ object qjdays extends App {
     }
     owner <- emptyStringOption((qstatjxml \\ "JB_owner").text)
     hardRequests = qstatjxml \\ "JB_hard_resource_list" \\ "element"
-    runtime <- hardRequests.find(el => (el \ "CE_name").text == "h_rt").map(el => (el \ "CE_stringval").text.toInt)
+    runtime <- hardRequests.find(el => (el \ "CE_name").text === "h_rt").map(el => (el \ "CE_stringval").text.toInt)
   } yield ADT(owner, runtime)
 
   jobIDs.map(jobAnalysis).seq.flatten.groupBy(_.runtime).mapValues {

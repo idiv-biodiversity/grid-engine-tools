@@ -8,6 +8,7 @@ name := "grid-engine-tools"
 
 scalaVersion := "2.12.2"
 
+libraryDependencies += "org.typelevel" %% "cats-core" % "0.9.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
 libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.12"
 

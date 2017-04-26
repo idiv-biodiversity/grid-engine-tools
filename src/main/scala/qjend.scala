@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.all._
 import sys.process._
 import util.{Try, Success, Failure}
 import xml._
@@ -36,7 +37,7 @@ object qjend extends App {
         None
     }
     hardRequests = qstatjxml \\ "JB_hard_resource_list" \\ "element"
-    runtime <- hardRequests.find(el => (el \ "CE_name").text == "h_rt").map(el => (el \ "CE_stringval").text.toLong)
+    runtime <- hardRequests.find(el => (el \ "CE_name").text === "h_rt").map(el => (el \ "CE_stringval").text.toLong)
   } yield (id,runtime)).seq.toMap
 
   // -------------------------------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 package grid.engine
 
+import cats.Eq
+
 object Utils {
 
   /** Returns grouped partitions.
@@ -16,7 +18,7 @@ object Utils {
     * }}}
     */
   // TODO no universal equals
-  def group[A,B](as: Seq[A])(p: A => B): List[(B,Seq[A])] = {
+  def group[A, B: Eq](as: Seq[A])(p: A => B): List[(B,Seq[A])] = {
     val s = as.size
 
     var i = 0
@@ -26,7 +28,7 @@ object Utils {
     while (i < s) {
       val current = as(i)
       val predicate = p(current)
-      val len = as.segmentLength(p(_) == predicate, i)
+      val len = as.segmentLength(p(_) === predicate, i)
       val slice = as.slice(from = i, until = i + len)
       buf += (predicate -> slice)
       i += len

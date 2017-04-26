@@ -1,5 +1,7 @@
 package grid.engine
 
+import cats.Eq
+import cats.instances.all._
 import sys.process._
 import util.{ Try, Success, Failure }
 import xml._
@@ -39,11 +41,13 @@ object `qdiagnose-job` extends App with Environment {
   object Verbosity {
     case object Quiet   extends Verbosity
     case object Verbose extends Verbosity
+
+    implicit val eq: Eq[Verbosity] = Eq.fromUniversalEquals
   }
 
   case class Conf(verbosity: Verbosity, output: Output, ids: List[String]) {
     def verbose: Boolean =
-      verbosity == Verbosity.Verbose
+      verbosity === Verbosity.Verbose
   }
 
   implicit val conf = {
@@ -112,13 +116,13 @@ object `qdiagnose-job` extends App with Environment {
       !isSuccess
 
     def isSuccess: Boolean =
-      failed == "0" &&
-        exit == "0"
+      failed === "0" &&
+        exit === "0"
 
     override def toString = {
       if (isSuccess)
         s"""$job.$task was successful"""
-      else if (failed.split(" ").headOption.exists(_ == "100") && exit.toInt > 128)
+      else if (failed.split(" ").headOption.exists(_ === "100") && exit.toInt > 128)
         s"""$job.$task received signal ${exit.toInt - 128}"""
       else
         s"""$job.$task exit: $exit failed: $failed"""
@@ -142,7 +146,7 @@ object `qdiagnose-job` extends App with Environment {
           case Success(v) =>
             v
           case Failure(e) =>
-            if (traw != "undefined") Console.err.println(e.getMessage)
+            if (traw =!= "undefined") Console.err.println(e.getMessage)
             1
         }
 
@@ -213,7 +217,7 @@ object `qdiagnose-job` extends App with Environment {
 
   def analyze(id: String, qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
     val checklogs = qacct collect {
-      case QacctInfo(job, task, failed, exit) if failed == "0" && exit != "0" =>
+      case QacctInfo(job, task, failed, exit) if failed === "0" && exit =!= "0" =>
         s"""job $job.$task exited with an error: check your log/output/error files to find out what went wrong"""
     }
 
@@ -255,7 +259,7 @@ object `qdiagnose-job` extends App with Environment {
     }
 
     val rescheduled = qmaster.count(_ matches """.*\|W\|rescheduling job (\d+\.\d+)""")
-    val rs = if (rescheduled == 1)
+    val rs = if (rescheduled === 1)
       List(s"job $id has been rescheduled once")
     else if (rescheduled > 1)
       List(s"job $id has been rescheduled $rescheduled times")

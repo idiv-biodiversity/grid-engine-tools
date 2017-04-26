@@ -1,5 +1,7 @@
 package grid.engine
 
+import cats.instances.all._
+
 object `qacct-efficiency` extends App with Accounting with Signal {
 
   exit on SIGPIPE
@@ -58,7 +60,7 @@ object `qacct-efficiency` extends App with Accounting with Signal {
 
   def filtered: Iterator[String] = prefiltered filter { line =>
     val first = line.split(" ").filter(_.nonEmpty)(0)
-    first == "slots" || first == "ru_wallclock" || first == "cpu"
+    first === "slots" || first === "ru_wallclock" || first === "cpu"
   }
 
   def slotsWallclockCPU: Iterator[Seq[Double]] = filtered.map({ line =>

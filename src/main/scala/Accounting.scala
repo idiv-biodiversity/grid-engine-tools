@@ -1,5 +1,7 @@
 package grid.engine
 
+import cats.instances.all._
+
 object Accounting extends Accounting
 
 trait Accounting {
@@ -40,12 +42,12 @@ trait Accounting {
   def success(job: Iterable[String]): Boolean = {
     def a = job exists { line =>
       val split = line.split(" ").filter(_.nonEmpty)
-      split.head == "exit_status" && split.last == "0"
+      split.head === "exit_status" && split.last === "0"
     }
 
     def b = job exists { line =>
       val split = line.split(" ").filter(_.nonEmpty)
-      split.head == "failed" && split.last == "0"
+      split.head === "failed" && split.last === "0"
     }
 
     a && b

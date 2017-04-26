@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.all._
 import sys.process._
 import util.Try
 import xml._
@@ -71,7 +72,7 @@ object qmemload extends App with Memory {
   for {
     node <- qhostxml \ "host"
     name = Name(node)
-    if name != "global"
+    if name =!= "global"
     virtual_free <- Resource(node)("virtual_free") map dehumanize.apply
     h_vmem <- Resource(node)("h_vmem") map dehumanize.apply
     lower = if (conf.lower.isDefined) conf.lower.get else 0.0
@@ -101,7 +102,7 @@ object qmemload extends App with Memory {
       val data = for {
         value <- node \ "resourcevalue"
         vname = (value \ "@name").text
-        if vname == name
+        if vname === name
       } yield value.text
 
       data.headOption

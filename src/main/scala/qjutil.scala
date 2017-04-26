@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.all._
 import sys.process._
 import util._
 import xml._
@@ -16,7 +17,7 @@ object qjutil extends App with Signal {
     val lower = 0.8
     val upper = 1.01
     val tolerance = 0
-    val user = sys.props get "user.name" filter { _ != "root" } getOrElse "*"
+    val user = sys.props get "user.name" filter { _ =!= "root" } getOrElse "*"
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -153,10 +154,10 @@ object qjutil extends App with Signal {
     }
     task <- jobdetail \\ "JB_ja_tasks" \\ "element"
     id = (task \ "JAT_task_number").text
-    if tid.isEmpty | id == tid
+    if tid.isEmpty | id === tid
     scaled <- task \\ "JAT_scaled_usage_list" \\ "Events"
     name = (scaled \\ "UA_name").text
-    if name == "cpu"
+    if name === "cpu"
     cpu = (scaled \\ "UA_value").text
     if cpu.nonEmpty
     optimum = run * slots
@@ -174,7 +175,7 @@ object qjutil extends App with Signal {
       else
         "OK"
 
-      if (conf.full || stat != "OK") {
+      if (conf.full || stat =!= "OK") {
         val percent = cpu.toDouble / optimum * 100
         Console.println(f"""$stat%-4s $job%-15s $slots%10d $cpu%10d $optimum%10d $percent%10.2f""")
       }

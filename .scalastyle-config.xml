@@ -4,9 +4,21 @@
 
   <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
 
-  <check level="warning" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true">
     <parameters>
       <parameter name="ignoreOverride">true</parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters>
+      <parameter name="regex"><![CDATA[ == ]]></parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters>
+      <parameter name="regex"><![CDATA[ != ]]></parameter>
     </parameters>
   </check>
 

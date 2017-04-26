@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.all._
 import sys.process._
 import util.Try
 import xml._
@@ -86,7 +87,7 @@ object qload extends App with Signal {
   for {
     node ← qhostxml \ "host"
     name = (node \ "@name").text
-    if name != "global"
+    if name =!= "global"
     tasks = (node \ "job").size
     load ← Resource(node)("load_short").map(_.toDouble)
     if tasks > 0 || load > 1
@@ -119,7 +120,7 @@ object qload extends App with Signal {
       val data = for {
         value ← node \ "resourcevalue"
         vname = (value \ "@name").text
-        if vname == name
+        if vname === name
       } yield value.text
 
       data.headOption

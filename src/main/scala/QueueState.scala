@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.Eq
 import enumeratum._
 
 sealed abstract class QueueState(override val entryName: String) extends EnumEntry
@@ -63,4 +64,6 @@ object QueueState extends Enum[QueueState] {
   case object subordinate_suspended extends QueueState("S") {
     override def toString = "(S)ubordinate suspended"
   }
+
+  implicit val eq: Eq[QueueState] = Eq.fromUniversalEquals
 }

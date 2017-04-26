@@ -1,5 +1,7 @@
 package grid.engine
 
+import cats.Eq
+import cats.instances.all._
 import sys.process._
 import xml._
 
@@ -61,6 +63,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   object Output {
     case object CLI    extends Output
     case object Nagios extends Output
+    implicit val eq: Eq[Output] = Eq.fromUniversalEquals
   }
 
   case class QueueInstance(queue: String, host: String) {
@@ -78,6 +81,8 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       case _ =>
         None
     }
+
+    implicit val eq: Eq[QueueInstance] = Eq.fromUniversalEquals
   }
 
   case class Conf(output: Output, hosts: List[String], qis: List[QueueInstance])
@@ -162,7 +167,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     val hosts = for {
       xhost <- xqhost \ "host"
       hostname = (xhost  \ "@name").text
-      if hostname != "global"
+      if hostname =!= "global"
 
       qis = for {
         xqueue <- xhost  \ "queue"
@@ -173,22 +178,22 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
         if nofilter || (conf.hosts contains hostname) || (conf.qis contains qi)
 
         status <- (xqueue \ "queuevalue") collectFirst {
-          case x if (x \ "@name").text == "state_string" => x.text
+          case x if (x \ "@name").text === "state_string" => x.text
         }
 
         jobs = for {
           xjob <- xhost \ "job"
 
           QueueInstance(jqi) <- (xjob \ "jobvalue") collectFirst {
-            case x if (x \ "@name").text == "qinstance_name" => x.text
+            case x if (x \ "@name").text === "qinstance_name" => x.text
           }
 
-          if qi == jqi
+          if qi === jqi
 
           id = (xjob \ "@name").text
 
           owner <- (xjob \ "jobvalue") collectFirst {
-            case x if (x \ "@name").text == "job_owner" => x.text
+            case x if (x \ "@name").text === "job_owner" => x.text
           }
         } yield JobNode(id, owner)
       } yield QueueInstanceNode(qi, status, jobs)
@@ -260,7 +265,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       for {
         qlist <- XML.loadString(cmd.!!) \ "queue_info" \ "Queue-List"
         report_qi = (qlist \ "name").text
-        if report_qi == qi.toString
+        if report_qi === qi.toString
         messages = (qlist \ "message").map(_.text).distinct
         if messages.nonEmpty
         crash <- messages collect { case CrashExtractor(crash) => crash }
@@ -282,7 +287,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       for {
         qlist <- XML.loadString(cmd.!!) \ "queue_info" \ "Queue-List"
         report_qi = (qlist \ "name").text
-        if report_qi == qi.toString
+        if report_qi === qi.toString
         message <- (qlist \ "load-alarm-reason").map(_.text).distinct
       } yield message
 
@@ -292,7 +297,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       for {
         qlist <- XML.loadString(cmd.!!) \ "queue_info" \ "Queue-List"
         report_qi = (qlist \ "name").text
-        if report_qi == qi.toString
+        if report_qi === qi.toString
         message <- (qlist \ "load-alarm-reason").map(_.text).distinct
       } yield message
 
@@ -337,7 +342,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
 
   // bail out early with warning for Nagios
 
-  if (conf.output == Output.Nagios && cluster.hosts.isEmpty) {
+  if (conf.output === Output.Nagios && cluster.hosts.isEmpty) {
     val message = conf.hosts.size match {
       case 0 =>
         s"""usage: qdiagnose-queue -o nagios -h host"""
@@ -358,11 +363,11 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   def needsJobMessage(explanations: Seq[(QueueState, Seq[String])]): Boolean =
     explanations exists {
       case (state,_) =>
-        state == QueueState.error ||
-        state == QueueState.disabled ||
-        state == QueueState.orphaned ||
-        state == QueueState.alarm_load ||
-        state == QueueState.alarm_suspend
+        state === QueueState.error ||
+        state === QueueState.disabled ||
+        state === QueueState.orphaned ||
+        state === QueueState.alarm_load ||
+        state === QueueState.alarm_suspend
     }
 
   val severities: Seq[Severity] = for {
@@ -380,7 +385,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       case Output.CLI =>
         for {
           (state, explanations) <- stateExplanations
-          if state != QueueState.ok // TODO make configurable
+          if state =!= QueueState.ok // TODO make configurable
         } {
           if (explanations.isEmpty)
             println(s"$qi $state")
@@ -404,7 +409,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       case Output.Nagios =>
         val combined = for {
           (state, explanations) <- stateExplanations
-          if state != QueueState.ok
+          if state =!= QueueState.ok
         } yield {
           if (explanations.nonEmpty) {
             val message = explanations.mkString(start = "(", sep = ", ", end = ")")
