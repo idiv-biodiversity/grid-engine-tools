@@ -387,6 +387,9 @@ object `qdiagnose-job` extends App with Environment {
                   |
                   |""".stripMargin)
 
+        if (analysis.isEmpty && qstat.isEmpty && qacct.isEmpty && execd.isEmpty && qmaster.isEmpty)
+          println("""There is no information.""")
+
         if (analysis.nonEmpty)
           print(s"""|${analysis.mkString(start = "- ", sep = "\n- ", end = "")}
                     |
