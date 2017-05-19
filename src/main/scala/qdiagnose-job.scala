@@ -2,6 +2,7 @@ package grid.engine
 
 import cats.Eq
 import cats.instances.all._
+import collection.mutable.ListBuffer
 import sys.process._
 import util.{ Try, Success, Failure }
 import xml._
@@ -83,32 +84,41 @@ object `qdiagnose-job` extends App with Environment {
   // -----------------------------------------------------------------------------------------------
 
   /** Body should not print anything or output in console will be ugly. */
-  def checking[R](name: String)(body: => R)(implicit conf: Conf): R = {
+  def checking[R](name: String)(body: => Either[String,Seq[R]])(implicit conf: Conf): Seq[R] = {
     if (conf.verbose)
       Console.err.print(s"checking $name ... ")
 
-    val result = body
+    body match {
+      case Left(message) =>
+        if (conf.verbose)
+          Console.err.println(s"""$message.""")
+        Seq()
 
-    if (conf.verbose)
-      Console.err.println("done.")
-
-    result
+      case Right(data) =>
+        if (conf.verbose)
+          Console.err.println("done.")
+        data
+    }
   }
 
-  def checkQstat(id: String): Seq[String] = try {
+  def checkQstat(id: String): Either[String,Seq[String]] = try {
     val cmd = s"""qstat -xml -j $id"""
     val x = XML.loadString(cmd.!!)
 
-    for {
+    val data = for {
       task <- x \\ "JB_ja_tasks" \ "element"
       taskid = (task \ "JAT_task_number").text
       messageElement <- task \ "JAT_message_list" \ "element"
       message = (messageElement \ "QIM_message").text
     } yield s"""$id.$taskid: $message"""
+
+    if (data.nonEmpty)
+      Right(data)
+    else
+      Left("not found")
   } catch {
     case e: org.xml.sax.SAXParseException =>
-      Console.err.println(e)
-      Seq()
+      Left(e.getMessage)
   }
 
   case class QacctInfo(job: String, task: Int, failed: String, exit: String) {
@@ -129,17 +139,19 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def checkQacct(id: String): Seq[QacctInfo] = {
+  def checkQacct(id: String): Either[String,Seq[QacctInfo]] = {
     val cmd = s"""qacct -j $id"""
+    val errors = ListBuffer[String]()
+    val pl = ProcessLogger(_ => (), errors += _)
 
     val raw = for {
-      line <- cmd.lineStream
+      line <- cmd.lineStream_!(pl)
       if line.startsWith("taskid") ||
          line.startsWith("failed") ||
          line.startsWith("exit_status")
     } yield line
 
-    raw.grouped(3).collect({
+    val data = raw.grouped(3).collect({
       case Seq(task, failed, exit) =>
         val traw = task.split(" ").filter(_.nonEmpty).drop(1).mkString(" ")
         val t = Try(traw.toInt) match {
@@ -157,62 +169,116 @@ object `qdiagnose-job` extends App with Environment {
           exit   = exit  .split(" ").filter(_.nonEmpty).drop(1).mkString(" ")
         )
     }).toList
+
+    if (errors.isEmpty)
+      Right(data)
+    else {
+      if (errors.exists(_.matches("""^error: job id \d+ not found""")))
+        Left("not found")
+      else
+        Left("unknown error")
+    }
   }
 
-  def checkExecd(id: String): Seq[String] = try {
+  def checkExecd(id: String): Either[String,Seq[String]] = {
     val cmd = s"""find $SGE_ROOT/$SGE_CELL/spool -mindepth 2 -maxdepth 2 -name messages""" #|
               s"""xargs grep -hw $id"""
 
-    for {
-      line <- cmd.lineStream
-      if line matches s""".*[^.:=(]\\b$id\\b.*"""
-      if ! (line matches """.+\|I\|SIGNAL.+""")
-      if ! (line matches """.+\|removing unreferenced job \d+\.\d+ without job report from ptf""")
-      if ! (line matches """.+\|reaping job "\d+" job usage retrieval complains: Job does not exist""")
-      if ! (line matches """.+\|process \(pid=\d+\) is blocking additional group id \d+""")
-      if ! (line matches """.+\|reaping job "\d+" job usage retrieval complains: Job does not exist""")
-      if ! (line matches """.+\|cleanup of slave tasks for job \d+\.\d+""")
-      if ! (line matches """.+\|found directory of job "active_jobs/\d+\.\d+"""")
-      if ! (line matches """.+\|can't open usage file "active_jobs/\d+\.\d+/usage" for job \d+\.\d+:.+""")
-      if ! (line matches """.+\|shepherd for job active_jobs/\d+\.\d+ has pid "\d+" and is not alive""")
+    val messages = ListBuffer[String]()
+    val errors = ListBuffer[String]()
+
+//       if line matches s""".*[^.:=(]\\b$id\\b.*"""
+
+    val blacklist = Seq(
+      """.+\|I\|SIGNAL.+""",
+      """.+\|removing unreferenced job \d+\.\d+ without job report from ptf""",
+      """.+\|reaping job "\d+" job usage retrieval complains: Job does not exist""",
+      """.+\|process \(pid=\d+\) is blocking additional group id \d+""",
+      """.+\|reaping job "\d+" job usage retrieval complains: Job does not exist""",
+      """.+\|cleanup of slave tasks for job \d+\.\d+""",
+      """.+\|found directory of job "active_jobs/\d+\.\d+"""",
+      """.+\|can't open usage file "active_jobs/\d+\.\d+/usage" for job \d+\.\d+:.+""",
+      """.+\|shepherd for job active_jobs/\d+\.\d+ has pid "\d+" and is not alive""",
       // category: has nothing to do with job success/failure
-      if ! (line matches """.+\|sending job [^ ]+ mail to user.+""")
-      if ! (line matches """.+\|additional group id \d+ was used by job_id \d+""")
-      if ! (line matches """.+\|skipping currently blocked additional group id \d+""")
-      if ! (line matches """.+\|there is no additional info about last usage of additional group id \d+ available""")
-      if ! (line matches s""".+\\|could not find pid $id in job list""")
-      if ! (line matches s""".+\\|PDC: could not read group entries from file /proc/$id/status""")
-    } yield line
-  } catch {
-    case e: Exception =>
-      Console.err.println(s"""external command failed: $e""")
-      Seq()
+      """.+\|sending job [^ ]+ mail to user.+""",
+      """.+\|additional group id \d+ was used by job_id \d+""",
+      """.+\|skipping currently blocked additional group id \d+""",
+      """.+\|there is no additional info about last usage of additional group id \d+ available""",
+      s""".+\\|could not find pid $id in job list""",
+      s""".+\\|PDC: could not read group entries from file /proc/$id/status"""
+    )
+
+    val fout: String => Unit = line => {
+      val hit = blacklist.foldLeft(false)(_ || line.matches(_))
+      if (!hit) messages += line
+    }
+
+    val ferr: String => Unit = line => errors += line
+
+    val pl = ProcessLogger(fout, ferr)
+
+    cmd.!(pl) match { // matches exit status
+      case 0 =>
+        Right(messages.toList)
+
+      case 123 =>
+        if (messages.nonEmpty)
+          Right(messages.toList)
+        else
+          Left("not found")
+
+      case i =>
+        if (errors.nonEmpty)
+          Left(s"""unexpected exit status: $i: ${errors.mkString(", ")}""")
+        else
+          Left(s"unexpected exit status: $i")
+    }
   }
 
-  def checkQmaster(id: String): Seq[String] = try {
+  def checkQmaster(id: String): Either[String,Seq[String]] = {
     val cmd = s"""grep -E [^.:=(]\\b$id\\b $SGE_ROOT/$SGE_CELL/spool/messages"""
+    val messages = ListBuffer[String]()
+    val errors = ListBuffer[String]()
 
-    for {
-      line <- cmd.lineStream
-      if ! (line matches """.+\|removing trigger to terminate job \d+\.\d+""")
-      if ! (line matches """.+\|task .+ at .+ of job \d+\.\d+ finished""")
-      if ! (line matches """.+\|dispatching job .+ took .+ \(reservation=true\)""")
-      if ! (line matches """.+\|scheduler tries to change tickets of a non running job \d+ task \d+\(state 0\)""")
-      if ! (line matches """.+\|\w+@\S+ modified "\d+" in Job list""")
-      if ! (line matches """.+\|ignoring start order of jobs \d+\.\d+ because it was modified""")
-      if ! (line matches """.+\|job \d+\.\d+ finished on host [^ ]+""")
-      if ! (line matches """.+\|job \d+\.\d+ is already in deletion""")
-      if ! (line matches """.+\|job \d+\.\d+ should have finished since \d+s""")
+    val blacklist = Seq(
+      """.+\|removing trigger to terminate job \d+\.\d+""",
+      """.+\|task .+ at .+ of job \d+\.\d+ finished""",
+      """.+\|dispatching job .+ took .+ \(reservation=true\)""",
+      """.+\|scheduler tries to change tickets of a non running job \d+ task \d+\(state 0\)""",
+      """.+\|\w+@\S+ modified "\d+" in Job list""",
+      """.+\|ignoring start order of jobs \d+\.\d+ because it was modified""",
+      """.+\|job \d+\.\d+ finished on host [^ ]+""",
+      """.+\|job \d+\.\d+ is already in deletion""",
+      """.+\|job \d+\.\d+ should have finished since \d+s""",
       // category: has nothing to do with job
-      if ! (line matches """.+\|P\|PROF:.+""")
-      if ! (line matches """.+\|commlib info: got [^ ]+ error.+""")
-      if ! (line matches """.+\|received old load report (.+) from exec host ".+"""")
-      if ! (line matches """.+\|sending job [^ ]+ mail to user.+""")
-    } yield line
-  } catch {
-    case e: Exception =>
-      Console.err.println(s"""external command failed: $e""")
-      Seq()
+      """.+\|P\|PROF:.+""",
+      """.+\|commlib info: got [^ ]+ error.+""",
+      """.+\|received old load report (.+) from exec host ".+"""",
+      """.+\|sending job [^ ]+ mail to user.+"""
+    )
+
+    val fout: String => Unit = line => {
+      val hit = blacklist.foldLeft(false)(_ || line.matches(_))
+      if (!hit) messages += line
+    }
+
+    val ferr: String => Unit = line => errors += line
+
+    val pl = ProcessLogger(fout, ferr)
+
+    cmd.!(pl) match { // matches exit status
+      case 0 =>
+        Right(messages.toList)
+
+      case 1 =>
+        Left("not found")
+
+      case i =>
+        if (errors.nonEmpty)
+          Left(s"""unexpected exit status: $i: ${errors.mkString(", ")}""")
+        else
+          Left(s"unexpected exit status: $i")
+    }
   }
 
   def analyze(id: String, qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
