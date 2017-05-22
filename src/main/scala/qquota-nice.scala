@@ -76,7 +76,7 @@ object `qquota-nice` extends App with Memory {
   }
 
   case class NumberEntry(user: String, resource: String, limit: Double, value: Double) extends ResourceEntry {
-    override def toString = {
+    override def toString: String = {
       val color = colorFor(limit.toDouble, value.toDouble)
 
       f"""$color$user%-8s $resource%10s ${value.toLong}%15s ${limit.toLong}%15s${Console.RESET}"""
@@ -87,7 +87,7 @@ object `qquota-nice` extends App with Memory {
     lazy val limit: Double = Memory.dehumanize(prettyLimit)
     lazy val value: Double = Memory.dehumanize(prettyValue)
 
-    override def toString = {
+    override def toString: String = {
       val color = colorFor(limit, value)
 
       f"""$color$user%-8s $resource%10s $prettyValue%15s $prettyLimit%15s${Console.RESET}"""
@@ -105,7 +105,7 @@ object `qquota-nice` extends App with Memory {
       tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
     }
 
-    override def toString = {
+    override def toString: String = {
       val color = colorFor(limit, value)
 
       f"""$color$user%-8s $resource%10s $prettyValue%15s $prettyLimit%15s${Console.RESET}"""

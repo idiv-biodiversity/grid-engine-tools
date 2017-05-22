@@ -67,7 +67,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   }
 
   case class QueueInstance(queue: String, host: String) {
-    override def toString =
+    override def toString: String =
       s"$queue@$host"
   }
 
@@ -125,13 +125,13 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
 
   /** Represents a snapshot of the current cluster. */
   case class ClusterTree(hosts: Seq[HostNode]) {
-    override def toString = {
+    override def toString: String = {
       s"""cluster:${hosts.mkString("\n  ","\n  ","\n")}"""
     }
   }
 
   case class HostNode(name: String, qis: Seq[QueueInstanceNode]) {
-    override def toString = {
+    override def toString: String = {
       s"""host: $name${qis.mkString("\n    ","\n    ","\n")}"""
     }
   }
@@ -140,7 +140,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     def jobOwnerMap: Map[String,Seq[String]] = {
       jobs.distinct.groupBy(_.owner).mapValues(_.map(_.id))
     }
-    override def toString = {
+    override def toString: String = {
       s"""queue: $qi $status${jobs.mkString("\n      ","\n      ","")}"""
     }
   }

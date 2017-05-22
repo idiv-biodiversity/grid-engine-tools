@@ -6,7 +6,7 @@
 
   <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true">
     <parameters>
-      <parameter name="ignoreOverride">true</parameter>
+      <parameter name="ignoreOverride">false</parameter>
     </parameters>
   </check>
 
