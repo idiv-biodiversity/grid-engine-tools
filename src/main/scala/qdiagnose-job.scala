@@ -251,6 +251,7 @@ object `qdiagnose-job` extends App with Environment {
       """.+\|job \d+\.\d+ is already in deletion""",
       """.+\|job \d+\.\d+ should have finished since \d+s""",
       // category: has nothing to do with job
+      """.+\|write intermediate accounting record for job "\d+.\d+" at .+""",
       """.+\|P\|PROF:.+""",
       """.+\|commlib info: got [^ ]+ error.+""",
       """.+\|received old load report (.+) from exec host ".+"""",
