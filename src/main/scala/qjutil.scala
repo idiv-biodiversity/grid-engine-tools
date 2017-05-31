@@ -136,6 +136,31 @@ object qjutil extends App with Signal {
   if (!conf.short)
     Console.println("""STAT JOB                  SLOTS    CPUTIME    OPTIMUM    PERCENT""")
 
+  def cputime(task: xml.Node): Long = {
+    def extract(scaled: xml.Node) = for {
+      name <- scaled \\ "UA_name"
+      if name.text === "cpu"
+      cpu <- scaled \\ "UA_value"
+      cputext = cpu.text
+      if cputext.nonEmpty
+      value <- Try(cputext.toDouble).toOption
+    } yield value
+
+    val master: Seq[Double] = for {
+      scaled <- task \\ "JAT_scaled_usage_list" \\ "Events"
+      cpu <- extract(scaled)
+    } yield cpu
+
+    assert(master.size === 1, s"there are ${master.size} master tasks, it should be exactly one")
+
+    val slaves: Seq[Double] = for {
+      scaled <- task \\ "JAT_task_list" \\ "PET_scaled_usage" \\ "Events"
+      cpu <- extract(scaled)
+    } yield cpu
+
+    (master.sum + slaves.sum).round
+  }
+
   for {
     job <- qstatxml \\ "job_list"
     jid = (job \ "JB_job_number").text.toInt
@@ -152,14 +177,10 @@ object qjutil extends App with Signal {
         Console.err.println(s"""$jid: $e""")
         f
     }
-    task <- jobdetail \\ "JB_ja_tasks" \\ "element"
+    task <- jobdetail \\ "JB_ja_tasks" \ "element"
     id = (task \ "JAT_task_number").text
     if tid.isEmpty | id === tid
-    scaled <- task \\ "JAT_scaled_usage_list" \\ "Events"
-    name = (scaled \\ "UA_name").text
-    if name === "cpu"
-    cpu = (scaled \\ "UA_value").text
-    if cpu.nonEmpty
+    cpu = cputime(task)
     optimum = run * slots
     out = if (conf.short) Output.short else Output.human
   } out(Job(jid,tid), slots, cpu.toDouble.round, optimum, run)
