@@ -7,6 +7,8 @@ object Utils {
   /** Returns grouped partitions.
     *
     * {{{
+    * scala> import cats.implicits._
+    *
     * scala> Utils.group(Vector.tabulate(0)(x => (x,x % 2)).sortBy(_._2))(_._2)
     * res0: List[(Int, Seq[(Int, Int)])] = List()
     *
