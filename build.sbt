@@ -1,16 +1,66 @@
+// ----------------------------------------------------------------------------
+// sbt plugins
+// ----------------------------------------------------------------------------
+
+enablePlugins(BuildInfoPlugin)
 enablePlugins(GitVersioning)
 
-import sbt._
-import Keys._
-import Process._
+// ----------------------------------------------------------------------------
+// basic project settings
+// ----------------------------------------------------------------------------
 
 name := "grid-engine-tools"
 
-scalaVersion := "2.12.2"
+git.baseVersion in ThisBuild := "0.5.0"
+
+scalaVersion in ThisBuild := "2.12.4"
 
 libraryDependencies += "org.typelevel" %% "cats-core" % "0.9.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
 libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.12"
+libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
+
+doctestTestFramework := DoctestTestFramework.ScalaCheck
+
+fork in run := true
+
+// ----------------------------------------------------------------------------
+// scala compiler options
+// ----------------------------------------------------------------------------
+
+scalacOptions in ThisBuild ++= Seq(
+  "-deprecation",
+  "-encoding",
+  "UTF-8",
+  "-feature",
+  "-unchecked"
+)
+
+// ----------------------------------------------------------------------------
+// build info
+// ----------------------------------------------------------------------------
+
+buildInfoKeys := Seq[BuildInfoKey](name, version)
+
+buildInfoPackage := "grid.engine"
+
+// ----------------------------------------------------------------------------
+// linting
+// ----------------------------------------------------------------------------
+
+scalastyleConfig := file(".scalastyle-config.xml")
+
+wartremoverErrors in (Compile, compile) ++= Seq(
+  Wart.ArrayEquals,
+  Wart.Equals,
+  Wart.FinalCaseClass,
+  Wart.OptionPartial,
+  Wart.TryPartial
+)
+
+// ----------------------------------------------------------------------------
+// assembly
+// ----------------------------------------------------------------------------
 
 assemblyJarName in assembly := "grid-engine-tools.jar"
 
@@ -20,6 +70,10 @@ assemblyExcludedJars in assembly := {
   val cp = (fullClasspath in assembly).value
   cp filter { _.data.getName == "jgdi.jar" }
 }
+
+// ----------------------------------------------------------------------------
+// install
+// ----------------------------------------------------------------------------
 
 val scripts = taskKey[Unit]("Creates the scripts.")
 
@@ -42,13 +96,3 @@ scripts := {
 }
 
 scripts := (scripts dependsOn assembly).value
-
-fork in run := true
-
-scalastyleConfig := file(".scalastyle-config.xml")
-
-lazy val compileScalastyle = taskKey[Unit]("compileScalastyle")
-
-compileScalastyle := org.scalastyle.sbt.ScalastylePlugin.scalastyle.in(Compile).toTask("").value
-
-(compile in Compile) := ((compile in Compile) dependsOn compileScalastyle).value

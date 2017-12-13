@@ -26,7 +26,7 @@ object qfreeresources extends App with JGDI with Signal {
   // ADT
   // -----------------------------------------------------------------------------------------------
 
-  case class QIFreeStatus(name: String, state: String, slots: Int, h_vmem_g: Int, psm_nfreectxts: Int) {
+  final case class QIFreeStatus(name: String, state: String, slots: Int, h_vmem_g: Int, psm_nfreectxts: Int) {
     lazy val gPerCore = h_vmem_g / slots
 
     override def toString: String = {

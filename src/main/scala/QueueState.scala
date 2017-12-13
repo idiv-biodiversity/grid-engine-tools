@@ -8,9 +8,9 @@ sealed abstract class QueueState(override val entryName: String) extends EnumEnt
 object QueueState extends Enum[QueueState] {
   val values = findValues
 
-  def fromStateString(s: String): Seq[QueueState] = s match {
+  def fromStateString(s: String): IndexedSeq[QueueState] = s match {
     case "" =>
-      List(ok)
+      Vector(ok)
 
     case s =>
       for {

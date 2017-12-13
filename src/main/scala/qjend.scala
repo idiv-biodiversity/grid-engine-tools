@@ -13,7 +13,7 @@ object qjend extends App {
   // getting job start
   // -------------------------------------------------------------------------------------------------
 
-  case class Job(id: String, task: Option[String], owner: String, start: Long, end: Option[Date])
+  final case class Job(id: String, task: Option[String], owner: String, start: Long)
 
   val jobs: Seq[Job] = for {
     job <- XML.loadString("""qstat -xml -s r -u *""".!!) \\ "job_list"
@@ -21,7 +21,7 @@ object qjend extends App {
     id = (job \ "JB_job_number").text
     task = emptyStringOption((job \ "tasks").text)
     start = (job \ "JAT_start_time").text
-  } yield Job(id, task, owner, formatter.parse(start).getTime, None)
+  } yield Job(id, task, owner, formatter.parse(start).getTime)
 
   // -------------------------------------------------------------------------------------------------
   // getting runtime resources
@@ -46,11 +46,12 @@ object qjend extends App {
 
   jobs.flatMap({ job =>
     runtimes.get(job.id) map { runtime =>
-      job.copy(end = Some(new Date(job.start + runtime * 1000)))
+      job -> new Date(job.start + runtime * 1000)
     }
-  }).sortBy(_.end) foreach { job =>
-    val id = job.task.fold(job.id)(task => s"""${job.id}.$task""")
-    println(f"""${job.end.get}        $id%-20s        ${job.owner}""")
+  }).sortBy(_._2) foreach {
+    case (job, end) =>
+      val id = job.task.fold(job.id)(task => s"""${job.id}.$task""")
+      println(f"""$end        $id%-20s        ${job.owner}""")
   }
 
   // -------------------------------------------------------------------------------------------------

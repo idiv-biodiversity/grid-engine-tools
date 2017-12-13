@@ -66,7 +66,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     implicit val eq: Eq[Output] = Eq.fromUniversalEquals
   }
 
-  case class QueueInstance(queue: String, host: String) {
+  final case class QueueInstance(queue: String, host: String) {
     override def toString: String =
       s"$queue@$host"
   }
@@ -85,7 +85,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     implicit val eq: Eq[QueueInstance] = Eq.fromUniversalEquals
   }
 
-  case class Conf(output: Output, hosts: List[String], qis: List[QueueInstance])
+  final case class Conf(output: Output, hosts: List[String], qis: List[QueueInstance])
   object Conf {
     def default: Conf =
       Conf(Output.CLI, Nil, Nil)
@@ -124,19 +124,19 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   // -----------------------------------------------------------------------------------------------
 
   /** Represents a snapshot of the current cluster. */
-  case class ClusterTree(hosts: Seq[HostNode]) {
+  final case class ClusterTree(hosts: Seq[HostNode]) {
     override def toString: String = {
       s"""cluster:${hosts.mkString("\n  ","\n  ","\n")}"""
     }
   }
 
-  case class HostNode(name: String, qis: Seq[QueueInstanceNode]) {
+  final case class HostNode(name: String, qis: Seq[QueueInstanceNode]) {
     override def toString: String = {
       s"""host: $name${qis.mkString("\n    ","\n    ","\n")}"""
     }
   }
 
-  case class QueueInstanceNode(qi: QueueInstance, status: String, jobs: Seq[JobNode]) {
+  final case class QueueInstanceNode(qi: QueueInstance, status: String, jobs: Seq[JobNode]) {
     def jobOwnerMap: Map[String,Seq[String]] = {
       jobs.distinct.groupBy(_.owner).mapValues(_.map(_.id))
     }
@@ -145,7 +145,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     }
   }
 
-  case class JobNode(id: String, owner: String)
+  final case class JobNode(id: String, owner: String)
 
   // -----------------------------------------------------------------------------------------------
   // functions
@@ -220,7 +220,7 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       }
 
     case QueueState.error =>
-      case class Crash(queue: String, job: String, host: String)
+      final case class Crash(queue: String, job: String, host: String)
 
       object CrashExtractor {
         val regex = """queue (\S+) marked QERROR as result of job (\d+)'s failure at host (\S+)""".r

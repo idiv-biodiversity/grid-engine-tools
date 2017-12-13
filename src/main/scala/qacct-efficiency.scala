@@ -28,7 +28,7 @@ object `qacct-efficiency` extends App with Accounting with Signal {
   // config
   // -------------------------------------------------------------------------------------------------
 
-  case class Conf(successful: Boolean)
+  final case class Conf(successful: Boolean)
 
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
@@ -63,7 +63,7 @@ object `qacct-efficiency` extends App with Accounting with Signal {
     first === "slots" || first === "ru_wallclock" || first === "cpu"
   }
 
-  def slotsWallclockCPU: Iterator[Seq[Double]] = filtered.map({ line =>
+  def slotsWallclockCPU: Iterator[collection.Seq[Double]] = filtered.map({ line =>
     line.split(" ").filter(_.nonEmpty).last.toDouble
   }).grouped(3)
 

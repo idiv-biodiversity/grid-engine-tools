@@ -80,7 +80,7 @@ object qwaiterstats extends App with Signal {
   // ADT
   // -------------------------------------------------------------------------------------------------
 
-  case class Stats(jobs: Int, slots: Int) {
+  final case class Stats(jobs: Int, slots: Int) {
     def +(other: Stats): Stats = Stats(jobs + other.jobs, slots + other.slots)
   }
 

@@ -46,7 +46,7 @@ object `qdiagnose-job` extends App with Environment {
     implicit val eq: Eq[Verbosity] = Eq.fromUniversalEquals
   }
 
-  case class Conf(verbosity: Verbosity, output: Output, ids: List[String]) {
+  final case class Conf(verbosity: Verbosity, output: Output, ids: List[String]) {
     def verbose: Boolean =
       verbosity === Verbosity.Verbose
   }
@@ -84,7 +84,7 @@ object `qdiagnose-job` extends App with Environment {
   // -----------------------------------------------------------------------------------------------
 
   /** Body should not print anything or output in console will be ugly. */
-  def checking[R](name: String)(body: => Either[String,Seq[R]])(implicit conf: Conf): Seq[R] = {
+  def checking[R](name: String)(body: => Either[String, IndexedSeq[R]])(implicit conf: Conf): IndexedSeq[R] = {
     if (conf.verbose)
       Console.err.print(s"checking $name ... ")
 
@@ -92,7 +92,7 @@ object `qdiagnose-job` extends App with Environment {
       case Left(message) =>
         if (conf.verbose)
           Console.err.println(s"""$message.""")
-        Seq()
+        IndexedSeq()
 
       case Right(data) =>
         if (conf.verbose)
@@ -101,7 +101,7 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def checkQstat(id: String): Either[String,Seq[String]] = try {
+  def checkQstat(id: String): Either[String, IndexedSeq[String]] = try {
     val cmd = s"""qstat -xml -j $id"""
     val x = XML.loadString(cmd.!!)
 
@@ -113,7 +113,7 @@ object `qdiagnose-job` extends App with Environment {
     } yield s"""$id.$taskid: $message"""
 
     if (data.nonEmpty)
-      Right(data)
+      Right(data.toIndexedSeq)
     else
       Left("not found")
   } catch {
@@ -121,7 +121,7 @@ object `qdiagnose-job` extends App with Environment {
       Left(e.getMessage)
   }
 
-  case class QacctInfo(job: String, task: Int, failed: String, exit: String) {
+  final case class QacctInfo(job: String, task: Int, failed: String, exit: String) {
     def isFailure: Boolean =
       !isSuccess
 
@@ -139,7 +139,7 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def checkQacct(id: String): Either[String,Seq[QacctInfo]] = {
+  def checkQacct(id: String): Either[String, IndexedSeq[QacctInfo]] = {
     val cmd = s"""qacct -j $id"""
     val errors = ListBuffer[String]()
     val pl = ProcessLogger(_ => (), errors += _)
@@ -168,7 +168,7 @@ object `qdiagnose-job` extends App with Environment {
           failed = failed.split(" ").filter(_.nonEmpty).drop(1).mkString(" "),
           exit   = exit  .split(" ").filter(_.nonEmpty).drop(1).mkString(" ")
         )
-    }).toList
+    }).toVector
 
     if (errors.isEmpty)
       Right(data)
@@ -180,7 +180,7 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def checkExecd(id: String): Either[String,Seq[String]] = {
+  def checkExecd(id: String): Either[String, IndexedSeq[String]] = {
     val cmd = s"""find $SGE_ROOT/$SGE_CELL/spool -mindepth 2 -maxdepth 2 -name messages""" #|
               s"""xargs grep -hw $id"""
 
@@ -219,11 +219,11 @@ object `qdiagnose-job` extends App with Environment {
 
     cmd.!(pl) match { // matches exit status
       case 0 =>
-        Right(messages.toList)
+        Right(messages.toVector)
 
       case 123 =>
         if (messages.nonEmpty)
-          Right(messages.toList)
+          Right(messages.toVector)
         else
           Left("not found")
 
@@ -235,7 +235,7 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def checkQmaster(id: String): Either[String,Seq[String]] = {
+  def checkQmaster(id: String): Either[String, IndexedSeq[String]] = {
     val cmd = s"""grep -E [^.:=(]\\b$id\\b $SGE_ROOT/$SGE_CELL/spool/messages"""
     val messages = ListBuffer[String]()
     val errors = ListBuffer[String]()
@@ -269,7 +269,7 @@ object `qdiagnose-job` extends App with Environment {
 
     cmd.!(pl) match { // matches exit status
       case 0 =>
-        Right(messages.toList)
+        Right(messages.toVector)
 
       case 1 =>
         Left("not found")
@@ -340,7 +340,7 @@ object `qdiagnose-job` extends App with Environment {
   // main
   // -----------------------------------------------------------------------------------------------
 
-  def shortenQacct(qacct: Seq[QacctInfo]): Seq[String] = for {
+  def shortenQacct(qacct: IndexedSeq[QacctInfo]): List[String] = for {
     (success,jobs) <- Utils.group(qacct)(_.isSuccess)
 
     (task, verb, failure) = jobs.size match {
@@ -351,7 +351,7 @@ object `qdiagnose-job` extends App with Environment {
     if (success) s"${jobs.head.job}.$task $verb successful"
     else         s"${jobs.head.job}.$task $verb $failure"
 
-  def printFull(qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Unit = {
+  def printFull(qstat: Seq[String], qacct: IndexedSeq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Unit = {
     qstat map { "qstat " + _ } foreach println
     shortenQacct(qacct) map { "qacct " + _ } foreach println
     execd map { "execd " + _ } foreach println

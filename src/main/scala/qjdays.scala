@@ -6,7 +6,7 @@ import util.{Try, Success, Failure}
 import xml._
 
 object qjdays extends App {
-  case class ADT(owner: String, runtime: Int)
+  final case class ADT(owner: String, runtime: Int)
 
   object ADT {
     def apply(owner: String, runtime: Option[Int]): Option[ADT] = runtime match {

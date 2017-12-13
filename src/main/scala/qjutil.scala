@@ -53,7 +53,7 @@ object qjutil extends App with Signal {
   // config
   // -----------------------------------------------------------------------------------------------
 
-  case class Conf (
+  final case class Conf (
     short: Boolean,
     full: Boolean,
     jids: Seq[Int],
@@ -117,7 +117,7 @@ object qjutil extends App with Signal {
   // main
   // -----------------------------------------------------------------------------------------------
 
-  case class Job (jid: Int, tid: String) {
+  final case class Job (jid: Int, tid: String) {
     override def toString: String =
       if (tid.isEmpty) s"""$jid""" else s"""$jid.$tid"""
   }
@@ -170,7 +170,7 @@ object qjutil extends App with Signal {
     if conf.tolerance < run
     tid = (job \ "tasks").text
     slots = (job \ "slots").text.toInt
-    if conf.ignoreSlotsGreater.isEmpty || conf.ignoreSlotsGreater.get >= slots
+    if conf.ignoreSlotsGreater.fold(true) { _ >= slots }
     jobdetail <- Try(XML.loadString(qstatj(jid).!!)) match {
       case s @ Success(_) => s
       case f @ Failure(e) =>

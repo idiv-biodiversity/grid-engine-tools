@@ -40,7 +40,7 @@ object qload extends App with Signal {
   // config
   // -------------------------------------------------------------------------------------------------
 
-  case class Conf(short: Boolean, nodes: Seq[String], lower: Double, upper: Double)
+  final case class Conf(short: Boolean, nodes: Seq[String], lower: Double, upper: Double)
 
   object Conf {
     object Double {

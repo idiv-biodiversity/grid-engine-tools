@@ -25,7 +25,7 @@ object `qquota-nice` extends App with Memory {
   // config
   // -------------------------------------------------------------------------------------------------
 
-  case class Conf(users: List[String])
+  final case class Conf(users: List[String])
 
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
@@ -75,7 +75,7 @@ object `qquota-nice` extends App with Memory {
     def value: Double
   }
 
-  case class NumberEntry(user: String, resource: String, limit: Double, value: Double) extends ResourceEntry {
+  final case class NumberEntry(user: String, resource: String, limit: Double, value: Double) extends ResourceEntry {
     override def toString: String = {
       val color = colorFor(limit.toDouble, value.toDouble)
 
@@ -83,7 +83,7 @@ object `qquota-nice` extends App with Memory {
     }
   }
 
-  case class MemoryEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
+  final case class MemoryEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
     lazy val limit: Double = Memory.dehumanize(prettyLimit)
     lazy val value: Double = Memory.dehumanize(prettyValue)
 
@@ -94,7 +94,7 @@ object `qquota-nice` extends App with Memory {
     }
   }
 
-  case class TimeEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
+  final case class TimeEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
     lazy val limit = {
       val tokens = prettyLimit.split(":").toList.map(_.toLong).reverse
       tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble

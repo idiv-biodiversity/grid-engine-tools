@@ -32,7 +32,7 @@ object qmemload extends App with Memory {
   // config
   // -------------------------------------------------------------------------------------------------
 
-  case class Conf(short: Boolean, nodes: Seq[String], lower: Option[Double], upper: Option[Double])
+  final case class Conf(short: Boolean, nodes: Seq[String], lower: Option[Double], upper: Option[Double])
 
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
@@ -75,8 +75,8 @@ object qmemload extends App with Memory {
     if name =!= "global"
     virtual_free <- Resource(node)("virtual_free") map dehumanize.apply
     h_vmem <- Resource(node)("h_vmem") map dehumanize.apply
-    lower = if (conf.lower.isDefined) conf.lower.get else 0.0
-    upper = if (conf.upper.isDefined) conf.upper.get else 0.0
+    lower = conf.lower.getOrElse(0.0)
+    upper = conf.upper.getOrElse(0.0)
   } if (virtual_free + upper < h_vmem) { // overloaded
     val out = if (conf.short) Output.short else Output.human("OVER")
     Console.println(out(name, humanize(virtual_free), humanize(h_vmem)))
