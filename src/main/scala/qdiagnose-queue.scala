@@ -2,8 +2,8 @@ package grid.engine
 
 import cats.Eq
 import cats.instances.all._
-import sys.process._
-import xml._
+import scala.sys.process._
+import scala.xml._
 
 object `qdiagnose-queue` extends App with Environment with Nagios {
 
@@ -29,6 +29,11 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
                 |
                 |     cli                      suitable for command line usage (default)
                 |     nagios                   suitable for use as a nagios check
+                |
+                |VERBOSITY
+                |
+                |  -q                          disables verbose output (default)
+                |  -v                          enables verbose output
                 |
                 |OTHER
                 |
@@ -85,10 +90,16 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     implicit val eq: Eq[QueueInstance] = Eq.fromUniversalEquals
   }
 
-  final case class Conf(output: Output, hosts: List[String], qis: List[QueueInstance])
+  final case class Conf(
+    output: Output,
+    hosts: List[String],
+    qis: List[QueueInstance],
+    verbose: Boolean
+  )
+
   object Conf {
     def default: Conf =
-      Conf(Output.CLI, Nil, Nil)
+      Conf(Output.CLI, Nil, Nil, verbose = false)
   }
 
   implicit val conf: Conf = {
@@ -107,6 +118,12 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
 
       case "-h" :: host :: tail =>
         accumulate(conf.copy(hosts = host :: conf.hosts))(tail)
+
+      case "-q" :: tail =>
+        accumulate(conf.copy(verbose = false))(tail)
+
+      case "-v" :: tail =>
+        accumulate(conf.copy(verbose = true))(tail)
 
       case QueueInstance(qi) :: tail =>
         accumulate(conf.copy(qis = qi :: conf.qis))(tail)
@@ -234,19 +251,45 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
         }
       }
 
-      def checkExecd(crash: Crash) = for {
-        line <- scala.io.Source.fromFile(s"$SGE_ROOT/$SGE_CELL/spool/${crash.host}/messages").getLines
-        log = line.split("\\|").drop(4).mkString("|")
-        if log matches s""".*\\b${crash.job}\\b.*"""
-        if ! (log matches """additional group id \d+ was used by job_id \d+""")
-        if ! (log matches """job \d+\.\d+ exceeded hard wallclock time - initiate terminate method""")
-        if ! (log matches """process \(pid=\d+\) is blocking additional group id \d+""")
-        if ! (log matches """reaping job "\d+" job usage retrieval complains: Job does not exist""")
-        if ! (log matches """removing unreferenced job \d+\.\d+ without job report from ptf""")
-        if ! (log matches """spooling job \d+\.\d+ took \d+ seconds""")
-        if ! (log matches """sending job .+ mail to user .+""")
-        message = classify(log)
-      } yield message
+      def checkExecd(crash: Crash): List[String] = {
+        val messages = for {
+          codec <- List(Codec.UTF8, Codec.ISO8859)
+        } yield Try {
+          val source = Source.fromFile(s"$SGE_ROOT/$SGE_CELL/spool/${crash.host}/messages")(codec)
+
+          try {
+            val messages: Iterator[String] = for {
+              line <- source.getLines
+              log = line.split("\\|").drop(4).mkString("|")
+              if log matches s""".*\\b${crash.job}\\b.*"""
+              if ! (log matches """additional group id \d+ was used by job_id \d+""")
+              if ! (log matches """job \d+\.\d+ exceeded hard wallclock time - initiate terminate method""")
+              if ! (log matches """process \(pid=\d+\) is blocking additional group id \d+""")
+              if ! (log matches """reaping job "\d+" job usage retrieval complains: Job does not exist""")
+              if ! (log matches """removing unreferenced job \d+\.\d+ without job report from ptf""")
+              if ! (log matches """spooling job \d+\.\d+ took \d+ seconds""")
+              if ! (log matches """sending job .+ mail to user .+""")
+              message = classify(log)
+            } yield message
+
+            messages.toList
+          } finally {
+            source.close()
+          }
+        } match {
+          case Success(messages) =>
+            messages
+
+          case Failure(error) =>
+            if (conf.verbose) {
+              Console.err.println(s"""[check execd] $error""")
+            }
+
+            Nil
+        }
+
+        messages.flatten.distinct
+      }
 
       object Classification {
         val prolog = """shepherd of job (\d+\.\d+) exited with exit status = 8""".r
@@ -347,11 +390,8 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
       case 0 =>
         s"""usage: qdiagnose-queue -o nagios -h host"""
 
-      case 1 =>
-        s"""no queue instances registered at host ${conf.hosts.head}"""
-
       case n =>
-        s"""no queue instances registered at hosts ${conf.hosts.mkString(" ")}"""
+        s"""no queue instances registered at ${conf.hosts.mkString(" ")}"""
     }
 
     println(message)
