@@ -4,7 +4,6 @@ import cats.Eq
 import cats.instances.all._
 import collection.mutable.ListBuffer
 import sys.process._
-import util.{ Try, Success, Failure }
 import xml._
 
 object `qdiagnose-job` extends App with Environment {

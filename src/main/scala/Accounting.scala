@@ -10,7 +10,7 @@ trait Accounting {
   val seperatorLine = "=============================================================="
 
   def accounting: Iterator[String] =
-    io.Source.stdin.getLines
+    Source.stdin.getLines
 
   // TODO this is inefficient in memory processing, will explode with large accounting databases
   def grouped: Iterator[List[String]] = {

@@ -2,7 +2,6 @@ package grid.engine
 
 import cats.instances.all._
 import sys.process._
-import util.Try
 import xml._
 
 object qload extends App with Signal {

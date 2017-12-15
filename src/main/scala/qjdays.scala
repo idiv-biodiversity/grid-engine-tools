@@ -2,7 +2,6 @@ package grid.engine
 
 import cats.instances.all._
 import sys.process._
-import util.{Try, Success, Failure}
 import xml._
 
 object qjdays extends App {
