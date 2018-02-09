@@ -145,7 +145,7 @@ object qjutil extends App with Signal {
   val df = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
 
   if (!conf.short)
-    Console.println("""STAT JOB                  SLOTS    CPUTIME    OPTIMUM    PERCENT""")
+    Console.println("""STAT OWNER      JOB                  SLOTS    CPUTIME    OPTIMUM    PERCENT""")
 
   def cputime(task: xml.Node): Either[String, Long] = {
     def extract(scaled: xml.Node) = for {
@@ -207,11 +207,12 @@ object qjutil extends App with Signal {
       }
     }
     optimum = run * slots
+    owner = (job \ "JB_owner").text
     out = if (conf.short) Output.short else Output.human
-  } out(Job(jid,tid), slots, cpu.toDouble.round, optimum, run)
+  } out(owner, Job(jid,tid), slots, cpu.toDouble.round, optimum, run)
 
   object Output {
-    val human = (job: Job, slots: Int, cpu: Long, optimum: Long, run: Long) ⇒ {
+    val human = (owner: String, job: Job, slots: Int, cpu: Long, optimum: Long, run: Long) ⇒ {
       val stat = if (cpu > optimum * conf.upper)
         "OVER"
       else if (slots > 1 && cpu < run)
@@ -223,11 +224,11 @@ object qjutil extends App with Signal {
 
       if (conf.full || stat =!= "OK") {
         val percent = cpu.toDouble / optimum * 100
-        Console.println(f"""$stat%-4s $job%-15s $slots%10d $cpu%10d $optimum%10d $percent%10.2f""")
+        Console.println(f"""$stat%-4s $owner%-10s $job%-15s $slots%10d $cpu%10d $optimum%10d $percent%10.2f""")
       }
     }
 
-    val short = (job: Job, slots: Int, cpu: Long, optimum: Long, run: Long) ⇒
+    val short = (owner: String, job: Job, slots: Int, cpu: Long, optimum: Long, run: Long) ⇒
     if ( (cpu > optimum * conf.upper) || (slots > 1 && cpu < run) || (cpu < optimum * conf.lower) )
       Console.println(s"""$job""")
   }
