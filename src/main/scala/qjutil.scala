@@ -4,7 +4,7 @@ import cats.instances.all._
 import sys.process._
 import xml._
 
-object qjutil extends App with Signal {
+object qjutil extends App with Config with Signal {
 
   exit on SIGPIPE
 
@@ -69,18 +69,6 @@ object qjutil extends App with Signal {
     ignoreSlotsGreater: Option[Int]
   )
 
-  object Conf {
-    object Int {
-      def unapply(s: String): Option[Int] =
-        Try(s.toInt).toOption
-    }
-
-    object Double {
-      def unapply(s: String): Option[Double] =
-        Try(s.toDouble).toOption
-    }
-  }
-
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
       case Nil ⇒
@@ -92,22 +80,22 @@ object qjutil extends App with Signal {
       case "-s" :: tail ⇒
         accumulate(conf.copy(full = false, short = true))(tail)
 
-      case "-us" :: Conf.Int(slots) :: tail ⇒
+      case "-us" :: ConfigParse.Int(slots) :: tail ⇒
         accumulate(conf.copy(ignoreSlotsGreater = Some(slots)))(tail)
 
-      case "-l" :: Conf.Double(mod) :: tail ⇒
+      case "-l" :: ConfigParse.Double(mod) :: tail ⇒
         accumulate(conf.copy(lower = mod))(tail)
 
-      case "-o" :: Conf.Double(mod) :: tail ⇒
+      case "-o" :: ConfigParse.Double(mod) :: tail ⇒
         accumulate(conf.copy(upper = mod))(tail)
 
-      case "-t" :: Conf.Int(seconds) :: tail ⇒
+      case "-t" :: ConfigParse.Int(seconds) :: tail ⇒
         accumulate(conf.copy(tolerance = seconds))(tail)
 
       case "-u" :: user :: tail ⇒
         accumulate(conf.copy(user = user))(tail)
 
-      case Conf.Int(jid) :: tail ⇒
+      case ConfigParse.Int(jid) :: tail ⇒
         accumulate(conf.copy(jids = conf.jids :+ jid, user = "*"))(tail)
 
       case "-q" :: tail ⇒
@@ -208,10 +196,10 @@ object qjutil extends App with Signal {
     }
     optimum = run * slots
     owner = (job \ "JB_owner").text
-    out = if (conf.short) Output.short else Output.human
+    out = if (conf.short) Print.short else Print.human
   } out(owner, Job(jid,tid), slots, cpu.toDouble.round, optimum, run)
 
-  object Output {
+  object Print {
     val human = (owner: String, job: Job, slots: Int, cpu: Long, optimum: Long, run: Long) ⇒ {
       val stat = if (cpu > optimum * conf.upper)
         "OVER"

@@ -4,7 +4,7 @@ import cats.instances.all._
 import sys.process._
 import xml._
 
-object qload extends App with Signal {
+object qload extends App with Config with Signal {
 
   exit on SIGPIPE
 
@@ -41,13 +41,6 @@ object qload extends App with Signal {
 
   final case class Conf(short: Boolean, nodes: Seq[String], lower: Double, upper: Double)
 
-  object Conf {
-    object Double {
-      def unapply(s: String): Option[Double] =
-        Try(s.toDouble).toOption
-    }
-  }
-
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
       case Nil ⇒
@@ -56,10 +49,10 @@ object qload extends App with Signal {
       case "-s" :: tail ⇒
         accumulate(conf.copy(short = true))(tail)
 
-      case "-l" :: Conf.Double(mod) :: tail ⇒
+      case "-l" :: ConfigParse.Double(mod) :: tail ⇒
         accumulate(conf.copy(lower = mod))(tail)
 
-      case "-u" :: Conf.Double(mod) :: tail ⇒
+      case "-u" :: ConfigParse.Double(mod) :: tail ⇒
         accumulate(conf.copy(upper = mod))(tail)
 
       case node :: tail ⇒
@@ -93,18 +86,18 @@ object qload extends App with Signal {
   } {
     // overloaded
     if (load > tasks * conf.upper) {
-      val out = if (conf.short) Output.short else Output.human("OVER")
+      val out = if (conf.short) Print.short else Print.human("OVER")
       Console.println(out(name, load, tasks))
     }
 
     // underutilized
     if (load < tasks * conf.lower) {
-      val out = if (conf.short) Output.short else Output.human("WARN")
+      val out = if (conf.short) Print.short else Print.human("WARN")
       Console.println(out(name, load, tasks))
     }
   }
 
-  object Output {
+  object Print {
     val human = (stat: String) ⇒ (name: String, load: Double, tasks: Int) ⇒ {
       val percent = load / tasks * 100
       f"""$stat%-4s $name%-10s $load%7.2f $tasks%5d $percent%7.2f"""
