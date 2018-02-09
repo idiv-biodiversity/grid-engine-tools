@@ -8,22 +8,31 @@ trait Nagios {
 
   sealed abstract class Severity(val value: Int) extends IntEnumEntry {
     def exit(): Nothing
+    def prefix: String
+
+    final def println(msg: String): this.type = {
+      Console.out.println(s"$prefix $msg")
+      this
+    }
   }
 
   object Severity extends IntEnum[Severity] {
     val values = findValues
 
     case object OK extends Severity(0) {
+      def prefix = "OK"
       def exit: Nothing =
         Nagios.exit.ok
     }
 
     case object WARNING  extends Severity(1) {
+      def prefix = "WARNING"
       def exit(): Nothing =
         Nagios.exit.warning
     }
 
     case object CRITICAL extends Severity(2) {
+      def prefix = "CRITICAL"
       def exit(): Nothing =
         Nagios.exit.critical
     }
