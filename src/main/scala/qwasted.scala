@@ -48,7 +48,7 @@ object qwasted extends App with Config with Nagios {
                 |
                 |OTHER
                 |
-                |  -? | --help                 print this help
+                |  -? | -h | --help            print this help
                 |
                 |EXAMPLES
                 |
