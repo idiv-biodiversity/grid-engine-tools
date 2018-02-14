@@ -9,29 +9,48 @@ object qload extends App with Config with Signal {
   exit on SIGPIPE
 
   object Default {
-    val lower = 0.8
-    val upper = 1.1
+    val underutilization = 0.8
+    val overload = 1.1
   }
 
   // -------------------------------------------------------------------------------------------------
   // help / usage
   // -------------------------------------------------------------------------------------------------
 
-  if (List("-?", "-h", "-help", "--help") exists args.contains) {
-    Console.println(s"""
-  |Usage: qload [-s] [-l mod] [-u mod] [node [node [..]]]
-  |
-  |List overloaded and underutilized compute nodes.
-  |
-  |    -? | -h | -help | --help            print this help
-  |    -s                                  short output (affected nodes only)
-  |    -l mod                              underutilization threshold modifier
-  |                                        default: ${Default.lower}
-  |    -u mod                              overload threshold modifier
-  |                                        default: ${Default.upper}
-  |    node                                apply to this node, multiple allowed
-  |                                        default: all
-  """.stripMargin)
+  if (List("-?", "-h", "--help") exists args.contains) {
+    println(s"""|usage: qload [-s] [-l t] [-u t] [host...]
+                |
+                |List overloaded and underutilized compute nodes.
+                |
+                |FILTERING
+                |
+                |  host...                     checks only the specified hosts
+                |
+                |THRESHOLDS
+                |
+                |  -l threshold                underutilization threshold in percent
+                |                              should be between 0 and 1
+                |                              default: ${Default.underutilization}
+                |
+                |  -u threshold                overload threshold in percent
+                |                              should be greater than 1
+                |                              default: ${Default.overload}
+                |
+                |OUTPUT
+                |
+                |  -s                          short output (affected nodes only)
+                |
+                |OTHER
+                |
+                |  -? | -h | --help            print this help
+                |
+                |EXAMPLES
+                |
+                |  Take a look at all problematic hosts:
+                |
+                |    qhost -j -h $(qload -s) | less
+                |
+                |""".stripMargin)
     sys exit 0
   }
 
@@ -39,7 +58,7 @@ object qload extends App with Config with Signal {
   // config
   // -------------------------------------------------------------------------------------------------
 
-  final case class Conf(short: Boolean, nodes: Seq[String], lower: Double, upper: Double)
+  final case class Conf(short: Boolean, nodes: Seq[String], underutilization: Double, overload: Double)
 
   val conf = {
     def accumulate(conf: Conf)(args: List[String]): Conf = args match {
@@ -50,16 +69,16 @@ object qload extends App with Config with Signal {
         accumulate(conf.copy(short = true))(tail)
 
       case "-l" :: ConfigParse.Double(mod) :: tail ⇒
-        accumulate(conf.copy(lower = mod))(tail)
+        accumulate(conf.copy(underutilization = mod))(tail)
 
       case "-u" :: ConfigParse.Double(mod) :: tail ⇒
-        accumulate(conf.copy(upper = mod))(tail)
+        accumulate(conf.copy(overload = mod))(tail)
 
       case node :: tail ⇒
         accumulate(conf.copy(nodes = conf.nodes :+ node))(tail)
     }
 
-    accumulate(Conf(false, Vector(), Default.lower, Default.upper))(args.toList)
+    accumulate(Conf(false, Vector(), Default.underutilization, Default.overload))(args.toList)
   }
 
   // -------------------------------------------------------------------------------------------------
@@ -85,13 +104,13 @@ object qload extends App with Config with Signal {
     if tasks > 0 || load > 1
   } {
     // overloaded
-    if (load > tasks * conf.upper) {
+    if (load > tasks * conf.overload) {
       val out = if (conf.short) Print.short else Print.human("OVER")
       Console.println(out(name, load, tasks))
     }
 
     // underutilized
-    if (load < tasks * conf.lower) {
+    if (load < tasks * conf.underutilization) {
       val out = if (conf.short) Print.short else Print.human("WARN")
       Console.println(out(name, load, tasks))
     }
