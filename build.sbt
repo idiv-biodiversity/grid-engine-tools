@@ -16,7 +16,7 @@ git.baseVersion in ThisBuild := "0.7.0"
 scalaVersion in ThisBuild := "2.12.4"
 
 libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1"
-libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
+libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.1.0"
 libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.12"
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
 
