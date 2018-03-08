@@ -48,7 +48,7 @@ object qload extends App with Config with Signal {
                 |
                 |  Take a look at all problematic hosts:
                 |
-                |    qhost -j -h $(qload -s) | less
+                |    qhost -j -h $$(qload -s) | less
                 |
                 |""".stripMargin)
     sys exit 0
