@@ -6,16 +6,67 @@ import xml._
 import java.util.Date
 
 object qjend extends App {
-  val formatter = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+
+  // -----------------------------------------------------------------------------------------------
+  // help / usage
+  // -----------------------------------------------------------------------------------------------
+
+  if (List("-?", "-h", "--help") exists args.contains) {
+    println(s"""|usage: qjend [host...]
+                |
+                |Shows when running jobs end.
+                |
+                |FILTERING
+                |
+                |  host...                     checks only the specified hosts
+                |
+                |OTHER
+                |
+                |  -? | -h | --help            print this help
+                |
+                |""".stripMargin)
+    sys exit 0
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // config
+  // -----------------------------------------------------------------------------------------------
+
+  final case class Conf(hosts: List[String])
+
+  object Conf {
+    def default: Conf =
+      Conf(hosts = Nil)
+  }
+
+  val conf: Conf = {
+    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
+      case Nil =>
+        conf.copy(hosts = conf.hosts.reverse)
+
+      case host :: tail =>
+        accumulate(conf.copy(hosts = host :: conf.hosts))(tail)
+    }
+
+    accumulate(Conf.default)(args.toList)
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // core data structures this app uses
+  // -----------------------------------------------------------------------------------------------
+
+  final case class Job(id: String, task: Option[String], owner: String, start: Long)
 
   // -------------------------------------------------------------------------------------------------
   // getting job start
   // -------------------------------------------------------------------------------------------------
 
-  final case class Job(id: String, task: Option[String], owner: String, start: Long)
+  val formatter = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
 
   val jobs: Seq[Job] = for {
     job <- XML.loadString("""qstat -xml -s r -u *""".!!) \\ "job_list"
+    qi <- QueueInstance.unapply((job \ "queue_name").text)
+    if conf.hosts.isEmpty || conf.hosts.contains(qi.host)
     owner <- emptyStringOption((job \ "JB_owner").text)
     id = (job \ "JB_job_number").text
     task = emptyStringOption((job \ "tasks").text)
