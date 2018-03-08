@@ -85,7 +85,7 @@ scripts := {
 
   def script(clazz: String) =
     s"""|#!/bin/sh
-        |java -cp "${prefix}/share/grid-engine-tools/grid-engine-tools.jar:$$SGE_ROOT/lib/jgdi.jar" '$clazz' "$$@"
+        |java $${JAVA_OPTS:--Xmx1G} -cp "${prefix}/share/grid-engine-tools/grid-engine-tools.jar:$$SGE_ROOT/lib/jgdi.jar" '$clazz' "$$@"
         |""".stripMargin
 
   (discoveredMainClasses in Compile).value foreach { clazz =>
