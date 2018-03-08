@@ -75,17 +75,31 @@ assemblyExcludedJars in assembly := {
 // install
 // ----------------------------------------------------------------------------
 
+val prefix = settingKey[String]("Installation prefix.")
+
 val scripts = taskKey[Unit]("Creates the scripts.")
+
+prefix := sys.env.getOrElse("PREFIX", "/usr/local")
 
 scripts := {
   val scriptDir = target.value / "scripts"
   if (!scriptDir.exists) scriptDir.mkdir()
 
-  val prefix = sys.env.getOrElse("PREFIX", "/usr/local")
+  val nameV = name.value
+  val prefixV = prefix.value
+
+  val classpath =
+    s"${prefixV}/share/${nameV}/${nameV}.jar" ::
+    "$SGE_ROOT/lib/jgdi.jar" ::
+    Nil
 
   def script(clazz: String) =
-    s"""|#!/bin/sh
-        |java $${JAVA_OPTS:--Xmx1G} -cp "${prefix}/share/grid-engine-tools/grid-engine-tools.jar:$$SGE_ROOT/lib/jgdi.jar" '$clazz' "$$@"
+    s"""|#!/bin/bash
+        |java \\
+        |  $${JAVA_OPTS:--Xmx1G} \\
+        |  -cp "${classpath.mkString(":")}" \\
+        |  '$clazz' \\
+        |  "$$@"
         |""".stripMargin
 
   (discoveredMainClasses in Compile).value foreach { clazz =>
