@@ -1,6 +1,13 @@
 #!/bin/bash
 
+function nodes.reserved {
+  qrstat -u '*' |
+    awk 'NR > 2 { system("qrstat -ar "$1) }' |
+    awk '$1 == "granted_slots_list" { print $2 }' |
+    grep -oP "[^@]+@\K[^=]+?(?==)"
+}
+
 command diff \
-  <(qconf -sel) \
-  <(qrstat -u '*' | awk 'NR > 2 { system("qrstat -ar "$1) }' | grep ^granted | grep -oE '(node|idiv)[0-9]+' | sort) |
-awk '$1 == "<" { print $2 }'
+  <(qconf -sel | sort -u) \
+  <(nodes.reserved | sort -u) |
+  awk '$1 == "<" { print $2 }'
