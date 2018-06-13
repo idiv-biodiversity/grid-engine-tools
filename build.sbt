@@ -11,7 +11,7 @@ enablePlugins(GitVersioning)
 
 name := "grid-engine-tools"
 
-git.baseVersion in ThisBuild := "0.7.0"
+git.baseVersion in ThisBuild := "0.7.1"
 
 scalaVersion in ThisBuild := "2.12.6"
 
