@@ -88,29 +88,30 @@ object qfreeresources extends App with JGDI with Signal {
       }).toInt
 
       // TODO parse memory value
-      def memPF(mem: String): Int = mem match {
-        case null =>
+      def memPF(mem: Option[String]): Int = mem match {
+        case None =>
           if (conf.verbose) {
             Console.err.println(s"""warning: $name: hc:h_vmem undefined, falling back to mem_total""")
           }
 
-          val memTotal = qi.getResourceValue("hl", "mem_total")
-          memTotal.dropRight(1).toDouble.floor.toInt
+          val memTotal = Option(qi.getResourceValue("hl", "mem_total"))
+          memTotal.map(_.dropRight(1).toDouble.floor.toInt).getOrElse(0)
 
-        case "0.000" =>
+        case Some("0.000") =>
           0
 
-        case mem if mem endsWith "G" =>
+        case Some(mem) if mem endsWith "G" =>
           mem.dropRight(1).toDouble.floor.toInt
 
-        case mem if mem endsWith "M" =>
+        case Some(mem) if mem endsWith "M" =>
           0
       }
 
-      val memory = memPF(qi.getResourceValue("hc", "h_vmem"))
-      val psm_nfreectxts = Option {
-        qi.getResourceValue("hl", "psm_nfreectxts")
-      } map { _.toInt } getOrElse 0
+      val memory = memPF(Option(qi.getResourceValue("hc", "h_vmem")))
+      val psm_nfreectxts =
+        Option(qi.getResourceValue("hl", "psm_nfreectxts"))
+          .map(_.toInt)
+          .getOrElse(0)
 
       new QIFreeStatus(name, state, slots, memory, psm_nfreectxts)
     }
