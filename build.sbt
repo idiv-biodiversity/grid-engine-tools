@@ -13,12 +13,12 @@ name := "grid-engine-tools"
 
 git.baseVersion in ThisBuild := "0.7.0"
 
-scalaVersion in ThisBuild := "2.12.4"
+scalaVersion in ThisBuild := "2.12.6"
 
-libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1"
+libraryDependencies += "org.typelevel" %% "cats-core" % "1.1.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.1.0"
-libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.12"
-libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
+libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.13"
+libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
 
 doctestTestFramework := DoctestTestFramework.ScalaCheck
 
