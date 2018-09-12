@@ -1,8 +1,11 @@
 package grid.engine
 
-import annotation.tailrec
-import collection.immutable.TreeMap
-import sys.process._
+import cats.Eq
+import cats.instances.string._
+import scala.annotation.tailrec
+import scala.collection.immutable.TreeMap
+import scala.sys.process._
+import scala.xml._
 
 object qrunnerstats extends App {
   def optLast[A](opts: String*)(convert: String => Option[A])(implicit args: List[String]): Option[A] = {
@@ -28,35 +31,36 @@ object qrunnerstats extends App {
 
   implicit val arguments = args.toList
 
-  val projectArg: Option[String] = optLast("-p", "--project") {
-    arg => Some(arg)
+  object conf {
+    val project: Option[String] = optLast("-p", "--project") {
+      arg => Some(arg)
+    }
   }
 
-  val cmd = projectArg match {
-    case Some(project) =>
-      // scalastyle:off
-      "qstat -ext -s r -u *" #| Seq("awk","""NR > 2 && $6 == "%s" { print $5, $19 }""".format(project))
-      // scalastyle:on
+  val cmd = "qstat -xml -ext -s r -u *"
+  val qstat = XML.loadString(cmd.!!)
 
-    case None =>
-      "qstat -s r -u *" #| Seq("awk","NR > 2 { print $4, $9 }")
-  }
+  val userStats: TreeMap[String, Stats] =
+    (qstat \\ "job_list").foldLeft(TreeMap[String, Stats]()) {
+      case (acc, job) =>
+        val project = (job \ "JB_project").text
 
-  // TODO tasks are not considered
-  val userStats: Map[String,Stats] = cmd.lineStream.foldLeft(TreeMap[String,Stats]()) { case (acc,line) =>
-    val tokens = line split " "
-    val user = tokens(0)
-    val slots = tokens(1).toInt
+        if (conf.project.fold(true)(_ === project)) {
+          val owner = (job \ "JB_owner").text
+          val slots = (job \ "slots").text.toInt
 
-    val stats = Stats(1, slots)
+          val stats = Stats(1, slots)
 
-    val merged = acc.get(user).foldLeft(stats)(_ + _)
+          val merged = acc.get(owner).foldLeft(stats)(_ + _)
 
-    acc.updated(user,merged)
-  }
+          acc.updated(owner, merged)
+        } else {
+          acc
+        }
+    }
 
   userStats foreach {
-    case (user,stats) =>
+    case (user, stats) =>
       println(f"""$user%-12s ${stats.jobs}%10d ${stats.slots}%10d""")
   }
 
