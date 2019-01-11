@@ -19,6 +19,9 @@ libraryDependencies += "org.typelevel" %% "cats-core" % "1.5.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.1.1"
 libraryDependencies += "com.beachape" %% "enumeratum" % "1.5.13"
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
+libraryDependencies += "com.github.scopt" %% "scopt" % "3.7.1"
+libraryDependencies +=
+  "com.github.wookietreiber" %% "scala-cli-tools" % "0.3.1"
 
 doctestTestFramework := DoctestTestFramework.ScalaCheck
 
