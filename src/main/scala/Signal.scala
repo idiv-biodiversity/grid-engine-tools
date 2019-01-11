@@ -14,7 +14,8 @@ trait Signal {
         sys.exit(128 + signal.getNumber)
     }
 
-    def on(signal: JSignal): Unit =
-      JSignal.handle(signal, ExitHandler)
+    def on(signal: JSignal): Unit = {
+      val _ = JSignal.handle(signal, ExitHandler)
+    }
   }
 }

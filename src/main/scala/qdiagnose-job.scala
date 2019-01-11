@@ -281,7 +281,7 @@ object `qdiagnose-job` extends App with Environment {
     }
   }
 
-  def analyze(id: String, qstat: Seq[String], qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
+  def analyze(id: String, qacct: Seq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Seq[String] = {
     val checklogs = qacct collect {
       case QacctInfo(job, task, failed, exit) if failed === "0" && exit =!= "0" =>
         s"""job $job.$task exited with an error: check your log/output/error files to find out what went wrong"""
@@ -344,7 +344,7 @@ object `qdiagnose-job` extends App with Environment {
 
     (task, verb, failure) = jobs.size match {
       case 1 => (s"${jobs.head.task}",                   "was",  "a failure")
-      case n => (s"${jobs.head.task}-${jobs.last.task}", "were", "failures")
+      case _ => (s"${jobs.head.task}-${jobs.last.task}", "were", "failures")
     }
   } yield
     if (success) s"${jobs.head.job}.$task $verb successful"
@@ -363,7 +363,7 @@ object `qdiagnose-job` extends App with Environment {
     val execd = checking("execution daemon messages")(checkExecd(id))
     val qmaster = checking("master daemon messages")(checkQmaster(id))
 
-    val analysis = analyze(id, qstat, qacct, execd, qmaster)
+    val analysis = analyze(id, qacct, execd, qmaster)
 
     conf.output match {
       case Output.ShortIfPossible =>

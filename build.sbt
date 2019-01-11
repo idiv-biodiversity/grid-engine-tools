@@ -36,7 +36,10 @@ scalacOptions in ThisBuild ++= Seq(
   "-encoding",
   "UTF-8",
   "-feature",
-  "-unchecked"
+  "-unchecked",
+  "-target:jvm-1.8",
+  "-Xfuture",
+  "-Xlint"
 )
 
 // ----------------------------------------------------------------------------

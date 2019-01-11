@@ -141,7 +141,7 @@ object qwasted extends App with Config with Nagios {
     try {
       Right(text.toDouble.round)
     } catch {
-      case e: NumberFormatException =>
+      case _: NumberFormatException =>
         Left(s"not a number: $text")
     }
   }

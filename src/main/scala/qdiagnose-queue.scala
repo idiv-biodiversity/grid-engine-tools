@@ -1,6 +1,5 @@
 package grid.engine
 
-import cats.Eq
 import cats.instances.all._
 import scala.sys.process._
 import scala.xml._
@@ -104,7 +103,7 @@ object `qdiagnose-queue` extends App with Config with Environment with Nagios {
       case QueueInstance(qi) :: tail =>
         accumulate(conf.copy(qis = qi :: conf.qis))(tail)
 
-      case x :: tail =>
+      case x :: _ =>
         Console.err.println(s"don't know what to do with $x")
         exit.critical
     }
@@ -360,7 +359,7 @@ object `qdiagnose-queue` extends App with Config with Environment with Nagios {
       case 0 =>
         s"""usage: qdiagnose-queue -o nagios -h host"""
 
-      case n =>
+      case _ =>
         s"""no queue instances registered at ${conf.hosts.mkString(" ")}"""
     }
 

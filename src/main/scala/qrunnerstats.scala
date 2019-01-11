@@ -1,6 +1,5 @@
 package grid.engine
 
-import cats.Eq
 import cats.instances.string._
 import scala.collection.immutable.TreeMap
 import scala.sys.process._
