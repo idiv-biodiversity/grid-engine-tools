@@ -1,140 +1,179 @@
 package grid.engine
 
-import cats.instances.all._
-import sys.process._
-import xml._
+import cats.instances.string._
+import scala.sys.process._
 
-object qload extends App with Config with Signal {
+import Utils.RichDouble
+import Utils.XML.QHostResource
+
+object qload extends GETool with Signal {
 
   exit on SIGPIPE
 
-  object Default {
-    val underutilization = 0.8
-    val overload = 1.1
-  }
-
-  // -------------------------------------------------------------------------------------------------
-  // help / usage
-  // -------------------------------------------------------------------------------------------------
-
-  if (List("-?", "-h", "--help") exists args.contains) {
-    println(s"""|usage: qload [-s] [-l t] [-u t] [host...]
-                |
-                |List overloaded and underutilized compute nodes.
-                |
-                |FILTERING
-                |
-                |  host...                     checks only the specified hosts
-                |
-                |THRESHOLDS
-                |
-                |  -l threshold                underutilization threshold in percent
-                |                              should be between 0 and 1
-                |                              default: ${Default.underutilization}
-                |
-                |  -u threshold                overload threshold in percent
-                |                              should be greater than 1
-                |                              default: ${Default.overload}
-                |
-                |OUTPUT
-                |
-                |  -s                          short output (affected nodes only)
-                |
-                |OTHER
-                |
-                |  -? | -h | --help            print this help
-                |
-                |EXAMPLES
-                |
-                |  Take a look at all problematic hosts:
-                |
-                |    qhost -j -h $$(qload -s) | less
-                |
-                |""".stripMargin)
-    sys exit 0
-  }
-
-  // -------------------------------------------------------------------------------------------------
-  // config
-  // -------------------------------------------------------------------------------------------------
-
-  final case class Conf(short: Boolean, nodes: Seq[String], underutilization: Double, overload: Double)
-
-  val conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil ⇒
-        conf
-
-      case "-s" :: tail ⇒
-        accumulate(conf.copy(short = true))(tail)
-
-      case "-l" :: ConfigParse.Double(mod) :: tail ⇒
-        accumulate(conf.copy(underutilization = mod))(tail)
-
-      case "-u" :: ConfigParse.Double(mod) :: tail ⇒
-        accumulate(conf.copy(overload = mod))(tail)
-
-      case node :: tail ⇒
-        accumulate(conf.copy(nodes = conf.nodes :+ node))(tail)
-    }
-
-    accumulate(Conf(false, Vector(), Default.underutilization, Default.overload))(args.toList)
-  }
-
-  // -------------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // main
-  // -------------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
-  val qhost = if (conf.nodes.isEmpty)
-    """qhost -xml -j -F load_short"""
-  else
-    s"""qhost -xml -j -F load_short -h ${conf.nodes.mkString(",")}"""
+  def run(implicit conf: Conf): Unit = {
+    val cmd = ListBuffer("qhost", "-xml", "-j", "-F", "load_short")
 
-  val qhostxml = XML.loadString(qhost.!!)
-
-  if (!conf.short)
-    Console.println("""STAT NODE          LOAD TASKS PERCENT""")
-
-  for {
-    node ← qhostxml \ "host"
-    name = (node \ "@name").text
-    if name =!= "global"
-    tasks = (node \ "job").size
-    load ← Resource(node)("load_short").map(_.toDouble)
-    if tasks > 0 || load > 1
-  } {
-    // overloaded
-    if (load > tasks * conf.overload) {
-      val out = if (conf.short) Print.short else Print.human("OVER")
-      Console.println(out(name, load, tasks))
+    if (conf.hosts.nonEmpty) {
+      cmd += "-h" += conf.hosts.mkString(",")
     }
 
-    // underutilized
-    if (load < tasks * conf.underutilization) {
-      val out = if (conf.short) Print.short else Print.human("WARN")
-      Console.println(out(name, load, tasks))
+    log.debug(s"""qstat cmd: ${cmd.mkString(" ")}""")
+
+    val xml = XML.loadString(cmd.!!)
+
+    val hosts: Seq[Host] = for {
+      node ← xml \ "host"
+
+      name = (node \ "@name").text
+      if name =!= "global"
+
+      tasks = (node \ "job").size
+      load ← QHostResource(node)("load_short").map(_.toDouble)
+      if tasks > 0 || load > 1
+    } yield Host(name, load, tasks)
+
+    if (conf.short)
+      show.short(hosts)
+    else
+      show.human(hosts)
+  }
+
+  object show {
+    def human(hosts: Seq[Host])(implicit conf: Conf): Unit = {
+      val table = Table(Sized("stat", "host", "load", "tasks", "util"))
+
+      table.alignments(2) = Table.Alignment.Right
+      table.alignments(3) = Table.Alignment.Right
+      table.alignments(4) = Table.Alignment.Right
+
+      for (host <- hosts) {
+        import host._
+
+        if (conf.full || status =!= "OK") {
+          table.rows += Sized (
+            status, name, s"${load.roundTo(1)}", s"$tasks", utilization
+          )
+        }
+      }
+
+      table.print()
+    }
+
+    def short(hosts: Seq[Host])(implicit conf: Conf): Unit = {
+      for (host <- hosts) {
+        if (host.status =!= "OK") {
+          Console.println(host.name)
+        }
+      }
     }
   }
 
-  object Print {
-    val human = (stat: String) ⇒ (name: String, load: Double, tasks: Int) ⇒ {
-      val percent = load / tasks * 100
-      f"""$stat%-4s $name%-10s $load%7.2f $tasks%5d $percent%7.2f"""
+  // --------------------------------------------------------------------------
+  // data
+  // --------------------------------------------------------------------------
+
+  final case class Host (
+    name: String,
+    load: Double,
+    tasks: Int
+  ) {
+    def status(implicit conf: Conf): String = {
+      if (load > tasks * conf.upper)
+        // overloaded
+        "OVER"
+      else if (load < tasks * conf.lower)
+        // bad performance
+        "WARN"
+      else
+        "OK"
     }
 
-    val short = (name: String, _: Double, _: Int) ⇒
-    name
-  }
-
-  object Resource {
-    def apply(node: Node)(name: String): Option[String] = {
-      val data = for {
-        value ← node \ "resourcevalue"
-        vname = (value \ "@name").text
-        if vname === name
-      } yield value.text
-
-      data.headOption
+    def utilization: String = {
+      tasks match {
+        case 0 => "-"
+        case _ => (load / tasks).percent(decimals = 1).toString + "%"
+      }
     }
   }
+
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
+
+  def app = "qload"
+
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+    short: Boolean = false,
+    full: Boolean = false,
+    lower: Double = Conf.Default.lower,
+    upper: Double = Conf.Default.upper,
+    hosts: Seq[String] = Vector(),
+  ) extends Config
+
+  object Conf extends ConfCompanion {
+    def default = Conf()
+
+    object Default {
+      val lower = 0.8
+      val upper = 1.1
+    }
+  }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("List overloaded and underutilized hosts.\n")
+
+    arg[String]("<host>...")
+      .unbounded()
+      .optional()
+      .action((host, c) => c.copy(hosts = c.hosts :+ host))
+      .text("hosts to check, defaults to all")
+
+    note("\nTHRESHOLDS\n")
+
+    opt[Double]('l', "underutilization-threshold")
+      .valueName("<threshold>")
+      .action((threshold, c) => c.copy(lower = threshold))
+      .text(s"underutilization threshold, defaults to ${Conf.Default.lower}")
+
+    opt[Double]('o', "overload-threshold")
+      .valueName("<threshold>")
+      .action((threshold, c) => c.copy(upper = threshold))
+      .text(s"overload threshold, defaults to ${Conf.Default.upper}")
+
+    note("\nOUTPUT MODES\n")
+
+    opt[Unit]('f', "full")
+      .action((_, c) => c.copy(full = true, short = false))
+      .text("full output, i.e. print even proper utilization")
+
+    opt[Unit]("short")
+      .action((_, c) => c.copy(full = false, short = true))
+      .text("short output, i.e. print only host name")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+  }
+
 }
