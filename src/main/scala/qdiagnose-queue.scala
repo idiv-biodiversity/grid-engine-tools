@@ -6,7 +6,7 @@ import scala.xml._
 
 import Utils.XML._
 
-object `qdiagnose-queue` extends App with Config with Environment with Nagios {
+object `qdiagnose-queue` extends App with Environment with Nagios {
 
   // -----------------------------------------------------------------------------------------------
   // help / usage

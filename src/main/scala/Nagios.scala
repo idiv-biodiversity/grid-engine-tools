@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.Eq
 import enumeratum.values._
 
 object Nagios extends Nagios
@@ -50,6 +51,27 @@ trait Nagios {
 
     def unknown: Nothing =
       sys exit 3
+  }
+
+  // --------------------------------------------------------------------------
+  // for command line arguments
+  // --------------------------------------------------------------------------
+
+  sealed trait Output
+
+  object Output {
+    case object CLI    extends Output
+    case object Nagios extends Output
+
+    implicit val eq: Eq[Output] = Eq.fromUniversalEquals
+
+    implicit val OutputRead: scopt.Read[Output] =
+      scopt.Read reads {
+        _.toLowerCase match {
+          case "nagios" => Output.Nagios
+          case "cli" => Output.CLI
+        }
+      }
   }
 
 }
