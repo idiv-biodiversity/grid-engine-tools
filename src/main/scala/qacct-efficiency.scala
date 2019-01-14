@@ -2,6 +2,8 @@ package grid.engine
 
 import cats.instances.all._
 
+import Utils.RichDouble
+
 object `qacct-efficiency` extends App with Accounting with Signal {
 
   exit on SIGPIPE
@@ -69,7 +71,7 @@ object `qacct-efficiency` extends App with Accounting with Signal {
 
   def efficiencies: Iterator[Double] = slotsWallclockCPU.map({
     case Seq(slots, wallclock, cpu) =>
-      (cpu / slots / wallclock * 10000).round / 100.0
+      (cpu / slots / wallclock).percent(decimals = 2)
 
     case _ =>
       0.0 // TODO should never happen

@@ -4,6 +4,34 @@ import cats.Eq
 
 object Utils {
 
+  implicit final class RichDouble(val value: Double) extends AnyVal {
+    /** Returns value in percent.
+      *
+      * {{{
+      * scala> import Utils.RichDouble
+      *
+      * scala> 0.2468.percent(decimals = 1)
+      * res0: Double = 24.7
+      * }}}
+      */
+    def percent(decimals: Int): Double =
+      (value * 100).roundTo(decimals)
+
+    /** Returns value rounded to one decimal.
+      *
+      * {{{
+      * scala> import Utils.RichDouble
+      *
+      * scala> 20.06.roundTo(1)
+      * res0: Double = 20.1
+      * }}}
+      */
+    def roundTo(decimals: Int): Double = {
+      val factor = 10 * decimals
+      (value * factor).round.toDouble / factor
+    }
+  }
+
   /** Returns grouped partitions.
     *
     * {{{
