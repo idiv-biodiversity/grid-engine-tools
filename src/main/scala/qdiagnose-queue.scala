@@ -5,6 +5,8 @@ import cats.instances.all._
 import scala.sys.process._
 import scala.xml._
 
+import Utils.XML._
+
 object `qdiagnose-queue` extends App with Config with Environment with Nagios {
 
   // -----------------------------------------------------------------------------------------------
@@ -168,24 +170,18 @@ object `qdiagnose-queue` extends App with Config with Environment with Nagios {
 
         if nofilter || (conf.hosts contains hostname) || (conf.qis contains qi)
 
-        status <- (xqueue \ "queuevalue") collectFirst {
-          case x if (x \ "@name").text === "state_string" => x.text
-        }
+        status <- QHostQueue(xqueue)("state_string")
 
         jobs = for {
           xjob <- xhost \ "job"
 
-          QueueInstance(jqi) <- (xjob \ "jobvalue") collectFirst {
-            case x if (x \ "@name").text === "qinstance_name" => x.text
-          }
+          QueueInstance(jqi) ← QHostJob(xjob)("qinstance_name")
 
           if qi === jqi
 
           id = (xjob \ "@name").text
 
-          owner <- (xjob \ "jobvalue") collectFirst {
-            case x if (x \ "@name").text === "job_owner" => x.text
-          }
+          owner ← QHostJob(xjob)("job_owner")
         } yield JobNode(id, owner)
       } yield QueueInstanceNode(qi, status, jobs)
       if qis.nonEmpty

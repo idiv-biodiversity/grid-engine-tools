@@ -1,6 +1,8 @@
 package grid.engine
 
 import cats.Eq
+import cats.instances.string._
+import scala.xml.Node
 
 object Utils {
 
@@ -64,6 +66,35 @@ object Utils {
     }
 
     buf.toList
+  }
+
+  object XML {
+    object QHostAttributeFilter {
+      def apply(node: Node)(tag: String, name: String): Option[String] = {
+        val data = for {
+          value ← node \ tag
+          vname = (value \ "@name").text
+          if vname === name
+        } yield value.text
+
+        data.headOption
+      }
+    }
+
+    object QHostJob {
+      def apply(node: Node)(name: String): Option[String] =
+        QHostAttributeFilter(node)("jobvalue", name)
+    }
+
+    object QHostQueue {
+      def apply(node: Node)(name: String): Option[String] =
+        QHostAttributeFilter(node)("queuevalue", name)
+    }
+
+    object QHostResource {
+      def apply(node: Node)(name: String): Option[String] =
+        QHostAttributeFilter(node)("resourcevalue", name)
+    }
   }
 
 }

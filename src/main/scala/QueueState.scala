@@ -2,6 +2,7 @@ package grid.engine
 
 import cats.Eq
 import enumeratum._
+import scala.xml.Node
 
 sealed abstract class QueueState(override val entryName: String) extends EnumEntry
 
@@ -18,6 +19,11 @@ object QueueState extends Enum[QueueState] {
         state <- withNameOption(c.toString)
       } yield state
   }
+
+  def fromQHostXML(node: Node): IndexedSeq[QueueState] =
+    Utils.XML.QHostQueue(node)("state_string")
+      .map(fromStateString)
+      .getOrElse(Vector())
 
   case object ok extends QueueState("ok")
 

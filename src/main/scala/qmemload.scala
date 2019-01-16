@@ -4,6 +4,8 @@ import cats.instances.all._
 import sys.process._
 import xml._
 
+import Utils.XML.QHostResource
+
 // TODO default thresholds
 // TODO colors instead of prefix
 object qmemload extends App with Memory {
@@ -72,8 +74,8 @@ object qmemload extends App with Memory {
     node <- qhostxml \ "host"
     name = Name(node)
     if name =!= "global"
-    virtual_free <- Resource(node)("virtual_free") map dehumanize.apply
-    h_vmem <- Resource(node)("h_vmem") map dehumanize.apply
+    virtual_free <- QHostResource(node)("virtual_free") map dehumanize.apply
+    h_vmem <- QHostResource(node)("h_vmem") map dehumanize.apply
     lower = conf.lower.getOrElse(0.0)
     upper = conf.upper.getOrElse(0.0)
   } if (virtual_free + upper < h_vmem) { // overloaded
@@ -94,17 +96,5 @@ object qmemload extends App with Memory {
 
   object Name {
     def apply(node: Node): String = (node \ "@name").text
-  }
-
-  object Resource {
-    def apply(node: Node)(name: String): Option[String] = {
-      val data = for {
-        value <- node \ "resourcevalue"
-        vname = (value \ "@name").text
-        if vname === name
-      } yield value.text
-
-      data.headOption
-    }
   }
 }
