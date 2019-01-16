@@ -3,9 +3,6 @@
 *.class
 *.log
 
-/lib
-/assembly
-
 # sbt specific
 .cache
 .history
@@ -22,11 +19,3 @@ project/plugins/project/
 .ensime_cache
 .scala_dependencies
 .worksheet
-
-# autoconf specific
-/autom4te.cache/
-/autoscan.log
-/configure
-/config.log
-/config.status
-Makefile

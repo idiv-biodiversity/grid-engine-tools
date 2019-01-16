@@ -68,51 +68,96 @@ wartremoverErrors in (Compile, compile) ++= Seq(
 // assembly
 // ----------------------------------------------------------------------------
 
-assemblyJarName in assembly := "grid-engine-tools.jar"
-
-target in assembly := file("assembly")
-
-assemblyExcludedJars in assembly := {
-  val cp = (fullClasspath in assembly).value
-  cp filter { _.data.getName == "jgdi.jar" }
-}
+assemblyJarName in assembly := s"""${name.value}.jar"""
 
 // ----------------------------------------------------------------------------
-// install
+// scripts / install
 // ----------------------------------------------------------------------------
 
 val prefix = settingKey[String]("Installation prefix.")
 
+val scriptsDir = settingKey[File]("Target path to scripts.")
+
 val scripts = taskKey[Unit]("Creates the scripts.")
+
+val install = taskKey[Unit]("Install to prefix.")
 
 prefix := sys.env.getOrElse("PREFIX", "/usr/local")
 
+scriptsDir := target.value / "scripts"
+
 scripts := {
-  val scriptDir = target.value / "scripts"
-  if (!scriptDir.exists) scriptDir.mkdir()
+  val dir = scriptsDir.value
+  if (!dir.exists) dir.mkdir()
 
-  val nameV = name.value
-  val prefixV = prefix.value
-
-  val classpath =
-    s"${prefixV}/share/${nameV}/${nameV}.jar" ::
-    "$SGE_ROOT/lib/jgdi.jar" ::
-    Nil
+  val p = prefix.value
+  val n = name.value
 
   def script(clazz: String) =
     s"""|#!/bin/bash
         |java \\
         |  $${JAVA_OPTS:--Xmx1G} \\
-        |  -cp "${classpath.mkString(":")}" \\
+        |  -cp "${p}/share/${n}/${n}.jar" \\
         |  '$clazz' \\
         |  "$$@"
         |""".stripMargin
 
   (discoveredMainClasses in Compile).value foreach { clazz =>
-    val app = clazz.drop(clazz.lastIndexOf(".") + 1).replaceAll("\\$minus", "-")
-    val s = scriptDir / app
+    val app = clazz
+      .drop(clazz.lastIndexOf(".") + 1)
+      .replaceAll("\\$minus", "-")
+
+    val s = dir / app
     IO.write(s, script(clazz))
+    s.setExecutable(true)
   }
 }
 
 scripts := (scripts dependsOn assembly).value
+
+install := {
+  import java.nio.file.{Files, StandardCopyOption}
+
+  val s = (scriptsDir.value * "*").get
+  val j = assembly.value
+  val p = file(prefix.value)
+
+  val bindir = p / "bin"
+  if (!bindir.exists) bindir.mkdirs()
+
+  for (script <- s) {
+    val source = script.toPath
+    val target = (bindir / s"""${script.name}""").toPath
+
+    Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES,
+      StandardCopyOption.REPLACE_EXISTING)
+  }
+
+  IO.copyFile(
+    sourceFile = j,
+    targetFile = p / "share" / name.value / (name.value + ".jar")
+  )
+
+  val bashScripts = ((sourceDirectory.value / "main" / "bash") * "*.sh").get
+
+  for (script ← bashScripts) {
+    val source = script.toPath
+    val target = (bindir / script.name.replaceAll(".sh", "")).toPath
+
+    Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES,
+      StandardCopyOption.REPLACE_EXISTING)
+
+    target.toFile.setExecutable(true)
+  }
+
+  val other = List("LICENSE", "NOTICE.md")
+
+  for (f ← other) {
+    IO.copyFile(
+      sourceFile = file(f),
+      targetFile = p / "share" / name.value / f
+    )
+  }
+}
+
+install := (install dependsOn scripts).value
