@@ -1,139 +1,141 @@
 package grid.engine
 
-import collection.JavaConverters._
-import com.sun.grid.jgdi._
+import cats.instances.int._
+import cats.instances.string._
+import scala.sys.process._
 
-object qfreeresources extends App with JGDI with Signal {
+import Utils.XML._
 
-  exit on SIGPIPE
+object qfreeresources extends GETool {
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
-
-  if (List("-?", "-h", "--help") exists args.contains) {
-    println(s"""|usage: qfreeresources
-                |
-                |Shows free resources.
-                |
-                |VERBOSITY
-                |
-                |  -q                          disables verbose output (default)
-                |  -v                          enables verbose output
-                |
-                |OTHER
-                |
-                |  -? | -h | --help            print this help
-                |
-                |""".stripMargin)
-    sys exit 0
-  }
-
-  // -----------------------------------------------------------------------------------------------
-  // config
-  // -----------------------------------------------------------------------------------------------
-
-  final case class Conf(verbose: Boolean)
-
-  object Conf {
-    def default: Conf =
-      Conf(verbose = false)
-  }
-
-  val conf: Conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil =>
-        conf
-
-      case "-q" :: tail =>
-        accumulate(conf.copy(verbose = false))(tail)
-
-      case "-v" :: tail =>
-        accumulate(conf.copy(verbose = true))(tail)
-
-      case x :: tail =>
-        if (conf.verbose) {
-          Console.err.println(s"ignoring argument: $x")
-        }
-
-        accumulate(conf)(tail)
-    }
-
-    accumulate(Conf.default)(args.toList)
-  }
-
-  // -----------------------------------------------------------------------------------------------
-  // core data structures this app uses
-  // -----------------------------------------------------------------------------------------------
-
-  final case class QIFreeStatus(name: String, state: String, slots: Int, h_vmem_g: Int, psm_nfreectxts: Int) {
-    lazy val gPerCore = h_vmem_g / slots
-
-    override def toString: String = {
-      val color = if (gPerCore >= 5) Console.GREEN else ""
-      f"""$color$name%24s   $slots%6d   $h_vmem_g%6dG   ~$gPerCore%5dG/core   $psm_nfreectxts%4d${Console.RESET}"""
-    }
-  }
-
-  object QIFreeStatus {
-    def apply(qi: monitoring.QueueInstanceSummary): QIFreeStatus = {
-      val name = qi.getName
-      val state = qi.getState
-      val slots = Option(qi.getResourceValue("hc", "slots")).getOrElse({
-        if (conf.verbose) {
-          Console.err.println(s"""warning: $name: hc:slots undefined, falling back to num_proc""")
-        }
-
-        qi.getResourceValue("hl", "num_proc")
-      }).toInt
-
-      // TODO parse memory value
-      def memPF(mem: Option[String]): Int = mem match {
-        case None =>
-          if (conf.verbose) {
-            Console.err.println(s"""warning: $name: hc:h_vmem undefined, falling back to mem_total""")
-          }
-
-          val memTotal = Option(qi.getResourceValue("hl", "mem_total"))
-          memTotal.map(_.dropRight(1).toDouble.floor.toInt).getOrElse(0)
-
-        case Some("0.000") =>
-          0
-
-        case Some(mem) if mem endsWith "G" =>
-          mem.dropRight(1).toDouble.floor.toInt
-
-        case Some(mem) if mem endsWith "M" =>
-          0
-      }
-
-      val memory = memPF(Option(qi.getResourceValue("hc", "h_vmem")))
-      val psm_nfreectxts =
-        Option(qi.getResourceValue("hl", "psm_nfreectxts"))
-          .map(_.toInt)
-          .getOrElse(0)
-
-      new QIFreeStatus(name, state, slots, memory, psm_nfreectxts)
-    }
-  }
-
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // main
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
-  val JGDI = jgdi
+  def run(implicit conf: Conf): Unit = {
+    val cmd = ListBuffer("qhost", "-xml", "-q", "-F", "h_vmem,slots")
 
-  // TODO psm_nfreectxts is custom
-  // TODO make tracked resources customizable
-  val raf = monitoring.filter.ResourceAttributeFilter.parse("h_vmem,slots,psm_nfreectxts,num_proc,mem_total")
-  val qisummaryopts = new monitoring.QueueInstanceSummaryOptions
-  qisummaryopts.setResourceAttributeFilter(raf)
+    if (conf.resources.nonEmpty) {
+      cmd += "-l"
+      cmd += conf.resources.map({ case (k, v) => s"$k=$v" }).mkString(",")
+    }
 
-  JGDI.getQueueInstanceSummary(qisummaryopts).getQueueInstanceSummary.asScala.map(QIFreeStatus(_)) filter { status =>
-    import status._
-    slots > 0 && h_vmem_g > 0 && gPerCore > 0 && !state.contains("u") && !state.contains("d")
-  } sortBy { - _.slots } foreach println
+    log.debug(s"""qhost cmd: ${cmd.mkString(" ")}""")
 
-  JGDI.close()
+    val xml = XML.loadString(cmd.!!)
+
+    val qis = for {
+      xml_host ← xml \ "host"
+
+      host = (xml_host \ "@name").text
+      if host =!= "global"
+
+      xml_queue ← xml_host \ "queue"
+
+      queue = (xml_queue \ "@name").text
+
+      states = QueueState.fromQHostXML(xml_queue)
+      if conf.full || states.forall(_ === QueueState.ok)
+
+      slots ← QHostResource(xml_host)("slots").map(_.toDouble.toInt)
+      if conf.full || slots > 0
+
+      memory ← QHostResource(xml_host)("h_vmem").map(
+        _.dropRight(1).toDouble.toInt
+      )
+      if conf.full || memory > 0
+
+      qi = QIFreeStatus(queue, host, slots, memory)
+      if conf.full || qi.gPerCore > 0
+    } yield qi
+
+    // TODO bring back color
+    val table = Table(Sized("queue", "host", "slots", "memory", "mem/slot"))
+
+    table.alignments(2) = Table.Alignment.Right
+    table.alignments(3) = Table.Alignment.Right
+    table.alignments(4) = Table.Alignment.Right
+
+    for (qi <- qis.sortBy(- _.slots)) {
+      import qi._
+
+      table.rows += Sized(
+        queue, host, s"$slots", s"${memory}G", s"${gPerCore}G"
+      )
+    }
+
+    table.print()
+  }
+
+  // --------------------------------------------------------------------------
+  // data
+  // --------------------------------------------------------------------------
+
+  final case class QIFreeStatus (
+    queue: String,
+    host: String,
+    slots: Int,
+    memory: Int
+  ) {
+    lazy val gPerCore = if (slots === 0) {
+      0
+    } else {
+      memory / slots
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
+
+  def app = "qfreeresources"
+
+  final case class Conf (
+    resources: Map[String, String] = Map.empty,
+    full: Boolean = false,
+    debug: Boolean = false,
+    verbose: Boolean = false,
+  ) extends Config
+
+  object Conf extends ConfCompanion {
+    def default = Conf()
+  }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("Show free resources.\n")
+
+    note("FILTER\n")
+
+    opt[Map[String, String]]('l', "resource-filter")
+      .valueName("resource=value,...")
+      .unbounded()
+      .action((x, c) => c.copy(resources = c.resources ++ x))
+      .text("resource filters, forwarded to qhost")
+
+    note("\nOUTPUT MODES\n")
+
+    opt[Unit]('f', "full")
+      .action((_, c) => c.copy(full = true))
+      .text("full output, i.e. also print full queue instances")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+  }
 
 }
