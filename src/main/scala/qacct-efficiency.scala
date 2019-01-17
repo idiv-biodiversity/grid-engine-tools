@@ -1,82 +1,101 @@
 package grid.engine
 
-import cats.instances.all._
+import cats.instances.string._
 
 import Utils.RichDouble
 
-object `qacct-efficiency` extends App with Accounting with Signal {
+object `qacct-efficiency` extends GETool with Accounting with Signal {
 
   exit on SIGPIPE
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
-
-  if (List("-?", "-h", "-help", "--help") exists args.contains) {
-    Console.println(s"""
-      |Usage: qacct -j ... | qacct-efficiency
-      |
-      |Displays job efficiency:
-      |
-      |    efficiency = cpu / slots / ru_wallclock * 100%
-      |
-      |  -? | -h | -help | --help            print this help
-      |  -s | --success                      only print efficiencies for successful jobs
-    """.stripMargin)
-    sys exit 0
-  }
-
-  // -------------------------------------------------------------------------------------------------
-  // config
-  // -------------------------------------------------------------------------------------------------
-
-  final case class Conf(successful: Boolean)
-
-  val conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil =>
-        conf
-
-      case "-s" :: tail =>
-        accumulate(conf.copy(successful = true))(tail)
-
-      case "--success" :: tail =>
-        accumulate(conf.copy(successful = true))(tail)
-
-      case x :: tail =>
-        Console.err.println(s"""Don't know what to do with argument "$x".""")
-        accumulate(conf)(tail)
-    }
-
-    accumulate(Conf(false))(args.toList)
-  }
-
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // main
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
-  def prefiltered: Iterator[String] = if (conf.successful)
-    successful.flatten
-  else
-    accounting
+  def run(implicit conf: Conf): Unit = {
+    def prefiltered: Iterator[String] =
+      if (conf.successful)
+        successful.flatten
+      else
+        accounting
 
-  def filtered: Iterator[String] = prefiltered filter { line =>
-    val first = line.split(" ").filter(_.nonEmpty)(0)
-    first === "slots" || first === "ru_wallclock" || first === "cpu"
+    def filtered: Iterator[String] =
+      prefiltered filter { line =>
+        val first = line.split(" ").filter(_.nonEmpty)(0)
+        first === "slots" || first === "ru_wallclock" || first === "cpu"
+      }
+
+    def slotsWallclockCPU: Iterator[collection.Seq[Double]] =
+      filtered.map({ line =>
+        line.split(" ").filter(_.nonEmpty).last.toDouble
+      }).grouped(3)
+
+    def efficiencies: Iterator[Double] =
+      slotsWallclockCPU.map({
+        case Seq(slots, wallclock, cpu) if wallclock > 0.0 =>
+          (cpu / slots / wallclock).percent(decimals = 2)
+
+        case _ =>
+          0.0 // TODO should never happen
+      })
+
+    efficiencies foreach println
   }
 
-  def slotsWallclockCPU: Iterator[collection.Seq[Double]] = filtered.map({ line =>
-    line.split(" ").filter(_.nonEmpty).last.toDouble
-  }).grouped(3)
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
 
-  def efficiencies: Iterator[Double] = slotsWallclockCPU.map({
-    case Seq(slots, wallclock, cpu) =>
-      (cpu / slots / wallclock).percent(decimals = 2)
+  def app = "qacct-efficiency"
 
-    case _ =>
-      0.0 // TODO should never happen
-  })
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+    successful: Boolean = false,
+  ) extends Config
 
-  efficiencies foreach println
+  object Conf extends ConfCompanion {
+    def default = Conf()
+  }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("Show job efficiency:")
+    note("")
+    note("  efficiency = cputime / runtime * 100%")
+
+    note("\nFILTER\n")
+
+    opt[Unit]("successful")
+      .action((_, c) => c.copy(successful = true))
+      .text("only for successful jobs")
+
+    note("\nOUTPUT MODES\n")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+    note("EXAMPLES")
+    note("")
+    note("  This command is intended to be used in a qacct pipe. Filtering")
+    note("  should be done in qacct.")
+    note("")
+    note("    qacct -j -o $USER | qacct-efficiency")
+    note("")
+  }
 
 }
