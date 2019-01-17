@@ -68,6 +68,22 @@ object Utils {
     buf.toList
   }
 
+  object Job {
+    trait Identifiable {
+      def id: String
+      def task: Option[String]
+
+      final def identification: String =
+        fullID(id, task)
+    }
+
+    def fullID(id: String, task: Option[String]): String =
+      task match {
+        case Some(task) => s"$id.$task"
+        case None       => s"$id"
+      }
+  }
+
   object XML {
     object QHostAttributeFilter {
       def apply(node: Node)(tag: String, name: String): Option[String] = {
