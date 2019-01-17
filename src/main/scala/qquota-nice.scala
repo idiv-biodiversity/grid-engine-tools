@@ -1,61 +1,67 @@
 package grid.engine
 
-import sys.process._
-import xml.XML
+import scala.sys.process._
+import scalax.cli.Memory
 
-object `qquota-nice` extends App with Memory {
+object `qquota-nice` extends GETool {
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // main
+  // --------------------------------------------------------------------------
 
-  if (List("-?", "-h", "-help", "--help") exists args.contains) {
-    Console.println(s"""
-      |Usage: qquota-nice
-      |
-      |Displays a human readable qquota output.
-      |
-      |  -? | -h | -help | --help            print this help
-      |  -u user                             only print quota for user
-    """.stripMargin)
-    sys exit 0
-  }
+  def run(implicit conf: Conf): Unit = {
+    val cmd = ListBuffer("qquota", "-xml")
 
-  // -------------------------------------------------------------------------------------------------
-  // config
-  // -------------------------------------------------------------------------------------------------
-
-  final case class Conf(users: List[String])
-
-  val conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil =>
-        conf
-
-      case "-u" :: user :: tail =>
-        accumulate(conf.copy(users = user :: conf.users))(tail)
-
-      case x :: tail =>
-        Console.err.println(s"""Don't know what to do with argument "$x".""")
-        accumulate(conf)(tail)
+    if (conf.users.nonEmpty) {
+      for (user ← conf.users) {
+        cmd += "-u" += user
+      }
     }
 
-    accumulate(Conf(Nil))(args.toList)
+    log.debug(s"""qquota cmd: ${cmd.mkString(" ")}""")
+
+    val xml = XML.loadString(cmd.!!)
+
+    val entries: Seq[(String, ResourceEntry)] = for {
+      rule <- xml \\ "qquota_rule"
+      rulename = (rule \ "@name").text
+      user = (rule \ "users").text
+      limitxml = (rule \ "limit")
+      resource = (limitxml \ "@resource").text
+      limit = (limitxml \ "@limit").text
+      value = (limitxml \ "@value").text
+    } yield {
+      val entry = resource match {
+        case "h_rt" =>
+          new TimeEntry(user, resource, limit, value)
+
+        case "h_vmem" =>
+          new MemoryEntry(user, resource, limit, value)
+
+        case "slots" =>
+          new NumberEntry(user, resource, limit.toDouble, value.toDouble)
+      }
+
+      (rulename, entry)
+    }
+
+    for ((rule, entries) ← entries.groupBy(_._1).toSeq.sortBy(_._1)) {
+      val table = Table(Sized(rule, "resource", "current", "limit"))
+
+      table.alignments(2) = Table.Alignment.Right
+      table.alignments(3) = Table.Alignment.Right
+
+      // TODO add colors
+      for ((_, entry) ← entries.sortBy(- _._2.value)) {
+        import entry._
+        table.rows += Sized(user, resource, humanValue, humanLimit)
+      }
+
+      table.print()
+
+      println()
+    }
   }
-
-  val qquota = if (conf.users.nonEmpty)
-    s"""qquota -xml -u ${conf.users.mkString(",")}"""
-  else
-    "qquota -xml"
-
-
-  // -----------------------------------------------------------------------------------------------
-  // main
-  // -----------------------------------------------------------------------------------------------
-
-  val xml = XML.loadString(qquota.!!)
-
-  val timeSteps = List(1, 60, 60*60, 60*60*24).map(_.toLong)
 
   def colorFor(limit: Double, value: Double): String = {
     if (value >= limit)
@@ -73,66 +79,95 @@ object `qquota-nice` extends App with Memory {
     def resource: String
     def limit: Double
     def value: Double
+    def humanLimit: String
+    def humanValue: String
   }
 
-  final case class NumberEntry(user: String, resource: String, limit: Double, value: Double) extends ResourceEntry {
-    override def toString: String = {
-      val color = colorFor(limit.toDouble, value.toDouble)
-
-      f"""$color$user%-8s $resource%10s ${value.toLong}%15s ${limit.toLong}%15s${Console.RESET}"""
-    }
+  final case class NumberEntry (
+    user: String,
+    resource: String,
+    limit: Double,
+    value: Double,
+  ) extends ResourceEntry {
+    def humanLimit: String = s"${limit.round}"
+    def humanValue: String = s"${value.round}"
   }
 
-  final case class MemoryEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
-    lazy val limit: Double = Memory.dehumanize(prettyLimit)
-    lazy val value: Double = Memory.dehumanize(prettyValue)
-
-    override def toString: String = {
-      val color = colorFor(limit, value)
-
-      f"""$color$user%-8s $resource%10s $prettyValue%15s $prettyLimit%15s${Console.RESET}"""
-    }
+  final case class MemoryEntry (
+    user: String,
+    resource: String,
+    inputLimit: String,
+    inputValue: String,
+  ) extends ResourceEntry {
+    lazy val value: Double = Memory.dehumanize(inputValue).getOrElse(0.0)
+    lazy val limit: Double = Memory.dehumanize(inputLimit).getOrElse(0.0)
+    lazy val humanLimit = Memory.humanize(limit.round)
+    lazy val humanValue = Memory.humanize(value.round)
   }
 
-  final case class TimeEntry(user: String, resource: String, prettyLimit: String, prettyValue: String) extends ResourceEntry {
+  final case class TimeEntry (
+    user: String,
+    resource: String,
+    humanLimit: String,
+    humanValue: String,
+  ) extends ResourceEntry {
     lazy val limit = {
-      val tokens = prettyLimit.split(":").toList.map(_.toLong).reverse
-      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
+      val tokens = humanLimit.split(":").toList.map(_.toLong).reverse
+      tokens.zip(TimeEntry.timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
     }
 
     lazy val value = {
-      val tokens = prettyValue.split(":").toList.map(_.toLong).reverse
-      tokens.zip(timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
-    }
-
-    override def toString: String = {
-      val color = colorFor(limit, value)
-
-      f"""$color$user%-8s $resource%10s $prettyValue%15s $prettyLimit%15s${Console.RESET}"""
+      val tokens = humanValue.split(":").toList.map(_.toLong).reverse
+      tokens.zip(TimeEntry.timeSteps).map(ab => ab._1 * ab._2).sum.toDouble
     }
   }
 
-  val entries: Seq[(String,ResourceEntry)] = for {
-    rule <- xml \\ "qquota_rule"
-    rulename = (rule \ "@name").text
-    user = (rule \ "users").text
-    limitxml = (rule \ "limit")
-    resource = (limitxml \ "@resource").text
-    limit = (limitxml \ "@limit").text
-    value = (limitxml \ "@value").text
-  } yield {
-    val entry = resource match {
-      case "h_rt" => new TimeEntry(user, resource, limit, value)
-      case "h_vmem" => new MemoryEntry(user, resource, limit, value)
-      case "slots" => new NumberEntry(user, resource, limit.toDouble, value.toDouble)
-    }
-
-    (rulename,entry)
+  object TimeEntry {
+    val timeSteps: List[Long] = List(1L, 60L, 3600L, 86400L)
   }
 
-  entries.groupBy(_._1).toSeq.sortBy(_._1) foreach { case (rulename,entries) =>
-    println(s"""$rulename:""")
-    entries.sortBy(- _._2.value) foreach { case (_,entry) => println(entry) }
-    println
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
+
+  def app = "qquota-nice"
+
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+    users: Vector[String] = Vector(),
+  ) extends Config
+
+  object Conf extends ConfCompanion {
+    def default = Conf()
   }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("Show quotas.\n")
+
+    opt[String]('u', "user")
+      .unbounded()
+      .action((user, c) => c.copy(users = c.users :+ user))
+      .text("users to check, defaults to all")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+  }
+
 }
