@@ -1,86 +1,124 @@
 package grid.engine
 
-import cats.Eq
-import cats.instances.all._
-import collection.mutable.ListBuffer
-import sys.process._
-import xml._
+import cats.instances.boolean._
+import cats.instances.int._
+import cats.instances.string._
+import scala.sys.process._
+import scopt.Read
 
-object `qdiagnose-job` extends App with Environment {
+object `qdiagnose-job` extends GETool with Environment {
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // main
+  // --------------------------------------------------------------------------
 
-  if (List("-?", "-h", "-help", "--help") exists args.contains) {
-    println(s"""|usage: qdiagnose-job id...
-                |
-                |Shows why jobs failed.
-                |
-                |  -o [normal|short|full|mail]         different kinds of output format
-                |  -q                                  quiet - less output
-                |  -v                                  verbose - more output
-                |  -? | -h | -help | --help            print this help
-                |""".stripMargin)
-    sys exit 0
-  }
+  def run(implicit conf: Conf): Unit = {
+    def shortenQacct(qacct: IndexedSeq[QacctInfo]): List[String] = for {
+      (success,jobs) <- Utils.group(qacct)(_.isSuccess)
 
-  // -----------------------------------------------------------------------------------------------
-  // configuration
-  // -----------------------------------------------------------------------------------------------
+      (task, verb, failure) = jobs.size match {
+        case 1 => (s"${jobs.head.task}",                   "was",  "a failure")
+        case _ => (s"${jobs.head.task}-${jobs.last.task}", "were", "failures")
+      }
+    } yield
+        if (success) s"${jobs.head.job}.$task $verb successful"
+        else         s"${jobs.head.job}.$task $verb $failure"
 
-  sealed trait Output
-  object Output {
-    case object FullMarkdownMail extends Output
-    case object Full             extends Output
-    case object ShortOrNothing   extends Output
-    case object ShortIfPossible  extends Output
-  }
-
-  sealed trait Verbosity
-  object Verbosity {
-    case object Quiet   extends Verbosity
-    case object Verbose extends Verbosity
-
-    implicit val eq: Eq[Verbosity] = Eq.fromUniversalEquals
-  }
-
-  final case class Conf(verbosity: Verbosity, output: Output, ids: List[String]) {
-    def verbose: Boolean =
-      verbosity === Verbosity.Verbose
-  }
-
-  implicit val conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil =>
-        conf.copy(ids = conf.ids.reverse)
-
-      case "-q" :: tail =>
-        accumulate(conf.copy(verbosity = Verbosity.Quiet))(tail)
-
-      case "-v" :: tail =>
-        accumulate(conf.copy(verbosity = Verbosity.Verbose))(tail)
-
-      case "-o" :: thing :: tail =>
-        val o = thing match {
-          case "normal" => Output.ShortIfPossible
-          case "short"  => Output.ShortOrNothing
-          case "full"   => Output.Full
-          case "mail"   => Output.FullMarkdownMail
-        }
-
-        accumulate(conf.copy(output = o))(tail)
-
-      case x :: tail =>
-        accumulate(conf.copy(ids = x :: conf.ids))(tail)
+    def printFull(qstat: Seq[String], qacct: IndexedSeq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Unit = {
+      qstat map { "qstat " + _ } foreach println
+      shortenQacct(qacct) map { "qacct " + _ } foreach println
+      execd map { "execd " + _ } foreach println
+      qmaster map { "qmaster " + _ } foreach println
     }
 
-    accumulate(Conf(Verbosity.Quiet, Output.ShortIfPossible, Nil))(args.toList)
+    for (id <- conf.jobs) {
+      val qstat = checking("active job database")(checkQstat(id))
+      val qacct = checking("accounting database")(checkQacct(id)).sortBy(_.task)
+      val execd = checking("execution daemon messages")(checkExecd(id))
+      val qmaster = checking("master daemon messages")(checkQmaster(id))
+
+      val analysis = analyze(id, qacct, execd, qmaster)
+
+      conf.output match {
+        case Output.ShortIfPossible =>
+          if (analysis.nonEmpty)
+            analysis foreach println
+          else
+            printFull(qstat, qacct, execd, qmaster)
+
+        case Output.Full =>
+          analysis foreach println
+          printFull(qstat, qacct, execd, qmaster)
+
+        case Output.ShortOrNothing =>
+          if (analysis.nonEmpty)
+            analysis foreach println
+          else
+            println("all ok / couldn't find anything / don't know how to interpret yet")
+
+        case Output.FullMarkdownMail =>
+          print(s"""|## Analysis for Job $id
+                    |
+                    |""".stripMargin)
+
+          if (analysis.isEmpty && qstat.isEmpty && qacct.isEmpty && execd.isEmpty && qmaster.isEmpty)
+            println("""There is no information.""")
+
+          if (analysis.nonEmpty)
+            print(s"""|${analysis.mkString(start = "- ", sep = "\n- ", end = "")}
+                      |
+                      |""".stripMargin)
+
+          if (qstat.nonEmpty)
+            print(s"""|### Live System Messages
+                      |
+                      |The base command used to fetch this information was: `qstat -j $id`
+                      |
+                      |```
+                      |${qstat.mkString("\n")}
+                      |```
+                      |
+                      |""".stripMargin)
+
+          if (qacct.nonEmpty)
+            print(s"""|### Accounting Information
+                      |
+                      |The base command used to fetch this information was: `qacct -j $id`
+                      |
+                      |```
+                      |${shortenQacct(qacct).mkString("\n")}
+                      |```
+                      |
+                      |""".stripMargin)
+
+          if (execd.nonEmpty)
+            print(s"""|### Execution Daemon Messages
+                      |
+                      |The base command used to fetch this information was: `egrep '[^.]\\b$id\\b' $SGE_ROOT/$SGE_CELL/spool/*/messages`
+                      |
+                      |```
+                      |${execd.mkString("\n")}
+                      |```
+                      |
+                      |""".stripMargin)
+
+          if (qmaster.nonEmpty)
+            print(s"""|### Master Daemon Messages
+                      |
+                      |The base command used to fetch this information was: `egrep '[^.]\\b$id\\b' $SGE_ROOT/$SGE_CELL/spool/messages`
+                      |
+                      |```
+                      |${qmaster.mkString("\n")}
+                      |```
+                      |
+                      |""".stripMargin)
+      }
+    }
   }
 
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // functions
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
   /** Body should not print anything or output in console will be ugly. */
   def checking[R](name: String)(body: => Either[String, IndexedSeq[R]])(implicit conf: Conf): IndexedSeq[R] = {
@@ -335,110 +373,73 @@ object `qdiagnose-job` extends App with Environment {
     checklogs ++ rs ++ es ++ qs
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // main
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
 
-  def shortenQacct(qacct: IndexedSeq[QacctInfo]): List[String] = for {
-    (success,jobs) <- Utils.group(qacct)(_.isSuccess)
+  def app = "qdiagnose-job"
 
-    (task, verb, failure) = jobs.size match {
-      case 1 => (s"${jobs.head.task}",                   "was",  "a failure")
-      case _ => (s"${jobs.head.task}-${jobs.last.task}", "were", "failures")
-    }
-  } yield
-    if (success) s"${jobs.head.job}.$task $verb successful"
-    else         s"${jobs.head.job}.$task $verb $failure"
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+    output: Output = Output.ShortIfPossible,
+    jobs: Vector[String] = Vector(),
+  ) extends Config
 
-  def printFull(qstat: Seq[String], qacct: IndexedSeq[QacctInfo], execd: Seq[String], qmaster: Seq[String]): Unit = {
-    qstat map { "qstat " + _ } foreach println
-    shortenQacct(qacct) map { "qacct " + _ } foreach println
-    execd map { "execd " + _ } foreach println
-    qmaster map { "qmaster " + _ } foreach println
+  object Conf extends ConfCompanion {
+    def default = Conf()
   }
 
-  for (id <- conf.ids) {
-    val qstat = checking("active job database")(checkQstat(id))
-    val qacct = checking("accounting database")(checkQacct(id)).sortBy(_.task)
-    val execd = checking("execution daemon messages")(checkExecd(id))
-    val qmaster = checking("master daemon messages")(checkQmaster(id))
+  sealed trait Output
+  object Output {
+    case object FullMarkdownMail extends Output
+    case object Full             extends Output
+    case object ShortOrNothing   extends Output
+    case object ShortIfPossible  extends Output
 
-    val analysis = analyze(id, qacct, execd, qmaster)
+    implicit val OutputRead: Read[Output] =
+      Read reads {
+        _ match {
+          case "normal" => ShortIfPossible
+          case "short"  => ShortOrNothing
+          case "full"   => Full
+          case "mail"   => FullMarkdownMail
+        }
+      }
+  }
 
-    conf.output match {
-      case Output.ShortIfPossible =>
-        if (analysis.nonEmpty)
-          analysis foreach println
-        else
-          printFull(qstat, qacct, execd, qmaster)
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
 
-      case Output.Full =>
-        analysis foreach println
-        printFull(qstat, qacct, execd, qmaster)
+    note("Shows why jobs failed.\n")
 
-      case Output.ShortOrNothing =>
-        if (analysis.nonEmpty)
-          analysis foreach println
-        else
-          println("all ok / couldn't find anything / don't know how to interpret yet")
+    arg[String]("<id>...")
+      .unbounded()
+      .action((id, c) => c.copy(jobs = c.jobs :+ id))
+      .text("jobs to check")
 
-      case Output.FullMarkdownMail =>
-        print(s"""|## Analysis for Job $id
-                  |
-                  |""".stripMargin)
+    note("\nOUTPUT MODES\n")
 
-        if (analysis.isEmpty && qstat.isEmpty && qacct.isEmpty && execd.isEmpty && qmaster.isEmpty)
-          println("""There is no information.""")
+    opt[Output]('o', "output")
+      .action((output, c) => c.copy(output = output))
+      .text(""""normal", "short", "full" or "mail", defaults to "normal"""")
 
-        if (analysis.nonEmpty)
-          print(s"""|${analysis.mkString(start = "- ", sep = "\n- ", end = "")}
-                    |
-                    |""".stripMargin)
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
 
-        if (qstat.nonEmpty)
-          print(s"""|### Live System Messages
-                    |
-                    |The base command used to fetch this information was: `qstat -j $id`
-                    |
-                    |```
-                    |${qstat.mkString("\n")}
-                    |```
-                    |
-                    |""".stripMargin)
+    note("\nOTHER OPTIONS\n")
 
-        if (qacct.nonEmpty)
-          print(s"""|### Accounting Information
-                    |
-                    |The base command used to fetch this information was: `qacct -j $id`
-                    |
-                    |```
-                    |${shortenQacct(qacct).mkString("\n")}
-                    |```
-                    |
-                    |""".stripMargin)
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
 
-        if (execd.nonEmpty)
-          print(s"""|### Execution Daemon Messages
-                    |
-                    |The base command used to fetch this information was: `egrep '[^.]\\b$id\\b' $SGE_ROOT/$SGE_CELL/spool/*/messages`
-                    |
-                    |```
-                    |${execd.mkString("\n")}
-                    |```
-                    |
-                    |""".stripMargin)
+    help('?', "help").text("show this usage text")
 
-        if (qmaster.nonEmpty)
-          print(s"""|### Master Daemon Messages
-                    |
-                    |The base command used to fetch this information was: `egrep '[^.]\\b$id\\b' $SGE_ROOT/$SGE_CELL/spool/messages`
-                    |
-                    |```
-                    |${qmaster.mkString("\n")}
-                    |```
-                    |
-                    |""".stripMargin)
-    }
+    version("version").text("show version")
+
+    note("")
   }
 
 }
