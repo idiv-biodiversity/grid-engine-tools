@@ -1,28 +1,61 @@
 package grid.engine
 
-object `qacct-failed` extends App with Accounting with Signal {
+object `qacct-failed` extends GETool with Accounting with Signal {
 
   exit on SIGPIPE
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // main
+  // --------------------------------------------------------------------------
 
-  if (List("-?", "-h", "-help", "--help") exists args.contains) {
-    Console.println(s"""
-      |Usage: qacct -j ... | qacct-failed
-      |
-      |Displays only failed jobs.
-      |
-      |  -? | -h | -help | --help            print this help
-    """.stripMargin)
-    sys exit 0
+  def run(implicit conf: Conf): Unit = {
+    failed.flatten foreach println
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // main
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
 
-  failed.flatten foreach println
+  def app = "qacct-failed"
+
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+  ) extends Config
+
+  object Conf extends ConfCompanion {
+    def default = Conf()
+  }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("Show only failed jobs.")
+
+    note("\nOUTPUT MODES\n")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+    note("EXAMPLES")
+    note("")
+    note("  This command is intended to be used in a qacct pipe:")
+    note("")
+    note("    qacct -j -o $USER | qacct-failed")
+    note("")
+  }
 
 }
