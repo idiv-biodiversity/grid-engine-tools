@@ -1,6 +1,6 @@
 package grid.engine
 
-import cats.instances.all._
+import cats.instances.string._
 
 object Accounting extends Accounting
 
@@ -14,8 +14,6 @@ trait Accounting {
 
   // TODO this is inefficient in memory processing, will explode with large accounting databases
   def grouped: Iterator[List[String]] = {
-    import collection.mutable.ListBuffer
-
     val buf = ListBuffer[List[String]]()
     var cur = ListBuffer[String]()
 

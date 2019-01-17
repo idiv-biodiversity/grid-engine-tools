@@ -2,7 +2,6 @@ package grid.engine
 
 import cats.Eq
 import enumeratum._
-import scala.xml.Node
 
 sealed abstract class QueueState(override val entryName: String) extends EnumEntry
 

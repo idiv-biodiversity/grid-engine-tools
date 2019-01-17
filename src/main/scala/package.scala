@@ -23,4 +23,18 @@ package object engine extends cats.syntax.EqSyntax {
   type IndexedSeq[A] = scala.collection.immutable.IndexedSeq[A]
   val  IndexedSeq    = scala.collection.immutable.IndexedSeq
 
+  type ListBuffer[A] = scala.collection.mutable.ListBuffer[A]
+  val  ListBuffer    = scala.collection.mutable.ListBuffer
+
+  type Node = scala.xml.Node
+
+  val XML = scala.xml.XML
+
+  val Table = scalax.cli.Table
+
+  type OptionParser[A] = scopt.OptionParser[A]
+
+  type Sized[A, B <: shapeless.Nat] = shapeless.Sized[A, B]
+  val  Sized                        = shapeless.Sized
+
 }

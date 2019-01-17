@@ -2,7 +2,6 @@ package grid.engine
 
 import cats.Eq
 import cats.instances.string._
-import scala.xml.Node
 
 object Utils {
 
@@ -54,7 +53,7 @@ object Utils {
 
     var i = 0
 
-    val buf = collection.mutable.ListBuffer[(B, IndexedSeq[A])]()
+    val buf = ListBuffer[(B, IndexedSeq[A])]()
 
     while (i < s) {
       val current = as(i)
