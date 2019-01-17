@@ -1,157 +1,130 @@
 package grid.engine
 
-import cats.instances.all._
+import cats.instances.string._
 import scala.sys.process._
-import scala.xml._
 
 import Utils.XML._
 
-object `qdiagnose-queue` extends App with Environment with Nagios {
+object `qdiagnose-queue` extends GETool with Environment with Nagios {
 
-  // -----------------------------------------------------------------------------------------------
-  // help / usage
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // main
+  // --------------------------------------------------------------------------
 
-  if (List("-?", "--help") exists args.contains) {
-    println(s"""|usage: qdiagnose-queue [-o {cli|nagios}] [-h host] [qi...]
-                |
-                |Shows status of queue instances and tries to identify the problems. This tool
-                |is Nagios-aware, see example below.
-                |
-                |FILTERING
-                |
-                |  queue@host                  checks only this specific queue instance
-                |
-                |  -h host                     checks all queue instances registered at host
-                |
-                |OUTPUT
-                |
-                |  -o {cli|nagios}             output type
-                |
-                |     cli                      suitable for command line usage (default)
-                |     nagios                   suitable for use as a nagios check
-                |
-                |VERBOSITY
-                |
-                |  -q                          disables verbose output (default)
-                |  -v                          enables verbose output
-                |
-                |OTHER
-                |
-                |  -? | --help                 print this help
-                |
-                |EXAMPLES
-                |
-                |  Checks all queue instances:
-                |
-                |    qdiagnose-queue
-                |
-                |  Checks all queue instances on host node001 and the queue instance
-                |  all.q@node002:
-                |
-                |    qdiagnose-queue -h node001 all.q@node002
-                |
-                |  Checks all queue instances on host node001, outputs a single-line message and
-                |  uses an exit status that Nagios-like monitoring systems can interpret (OK,
-                |  WARNING, CRITICAL, UNKNOWN):
-                |
-                |    qdiagnose-queue -o nagios -h node001
-                |
-                |""".stripMargin)
-    sys exit 0
-  }
+  def run(implicit conf: Conf): Unit = {
+    val cluster = snapshotFromQhost
 
-  // -----------------------------------------------------------------------------------------------
-  // configuration
-  // -----------------------------------------------------------------------------------------------
+    // bail out early with warning for Nagios
 
-  final case class Conf(
-    output: Output,
-    hosts: List[String],
-    qis: List[QueueInstance],
-    verbose: Boolean
-  )
+    if (conf.output === Output.Nagios && cluster.hosts.isEmpty) {
+      val message = conf.hosts.size match {
+        case 0 =>
+          s"""usage: qdiagnose-queue -o nagios -h host"""
 
-  object Conf {
-    def default: Conf =
-      Conf(Output.CLI, Nil, Nil, verbose = false)
-  }
+        case _ =>
+          s"""no queue instances registered at ${conf.hosts.mkString(" ")}"""
+      }
 
-  implicit val conf: Conf = {
-    def accumulate(conf: Conf)(args: List[String]): Conf = args match {
-      case Nil =>
-        // need to reverse both lists because we built them up backwards
-        conf.copy(hosts = conf.hosts.reverse, qis = conf.qis.reverse)
-
-      case "-o" :: output :: tail =>
-        val o = output match {
-          case "cli"    => Output.CLI
-          case "nagios" => Output.Nagios
-        }
-
-        accumulate(conf.copy(output = o))(tail)
-
-      case "-h" :: host :: tail =>
-        accumulate(conf.copy(hosts = host :: conf.hosts))(tail)
-
-      case "-q" :: tail =>
-        accumulate(conf.copy(verbose = false))(tail)
-
-      case "-v" :: tail =>
-        accumulate(conf.copy(verbose = true))(tail)
-
-      case QueueInstance(qi) :: tail =>
-        accumulate(conf.copy(qis = qi :: conf.qis))(tail)
-
-      case x :: _ =>
-        Console.err.println(s"don't know what to do with $x")
-        exit.critical
+      println(message)
+      exit.warning
     }
 
-    accumulate(Conf.default)(args.toList)
-  }
+    // output
 
-  // -----------------------------------------------------------------------------------------------
-  // core data structures this app uses
-  // -----------------------------------------------------------------------------------------------
+    val severities: Seq[Severity] = for {
+      qinode <- cluster.hosts.flatMap(_.qis)
+      qi     = qinode.qi
+      status = qinode.status
+      jobs   = qinode.jobOwnerMap
 
-  /** Represents a snapshot of the current cluster. */
-  final case class ClusterTree(hosts: Seq[HostNode]) {
-    override def toString: String = {
-      s"""cluster:${hosts.mkString("\n  ","\n  ","\n")}"""
+      stateExplanations =
+      for (state <- QueueState.fromStateString(status)) yield
+      state -> explain(qi, state)
+
+      // here output and getting severities happen at the same time
+      severity <- conf.output match {
+        case Output.CLI =>
+          for {
+            (state, explanations) <- stateExplanations
+            if state =!= QueueState.ok // TODO make configurable
+          } {
+            if (explanations.isEmpty)
+              println(s"$qi $state")
+            else for (explanation <- explanations)
+              println(s"$qi $state $explanation")
+          }
+
+          if (needsJobMessage(stateExplanations)) {
+            val jobmessage = if (jobs.isEmpty)
+              "no jobs"
+            else {
+              val joblist = jobs.mapValues(_.mkString("(", ", ", ")")).mkString(", ")
+              s"""jobs: $joblist"""
+            }
+
+            println(s"$qi $jobmessage")
+          }
+
+          Nil // no need to return severities for CLI output
+
+        case Output.Nagios =>
+          val combined = for {
+            (state, explanations) <- stateExplanations
+            if state =!= QueueState.ok
+          } yield {
+            if (explanations.nonEmpty) {
+              val message = explanations.mkString(start = "(", sep = ", ", end = ")")
+              s"""state=$state $message"""
+            } else
+                s"""state=$state"""
+          }
+
+          val jobMessages = if (needsJobMessage(stateExplanations)) {
+            val message = if (jobs.isEmpty)
+              "no jobs"
+            else {
+              val joblist = jobs.mapValues(_.mkString("(", ", ", ")")).mkString(", ")
+              s"""jobs: $joblist"""
+            }
+
+            List(message)
+          } else Nil
+
+          val _severities = (for ((state,_) <- stateExplanations) yield
+                                                                    severity(state)).sortBy(_.value)
+
+          val _severity = _severities.lastOption.getOrElse("")
+
+          println(s"""$qi ${_severity} ${(combined ++ jobMessages).mkString("; ")}""".trim)
+
+          _severities
+      }
+    } yield severity
+
+    // exit status for Nagios-like monitoring systems
+
+    conf.output match {
+      case Output.CLI =>
+        exit.ok
+
+      case Output.Nagios =>
+        severities.sortBy(_.value).lastOption.getOrElse(Severity.OK).exit()
     }
   }
 
-  final case class HostNode(name: String, qis: Seq[QueueInstanceNode]) {
-    override def toString: String = {
-      s"""host: $name${qis.mkString("\n    ","\n    ","\n")}"""
-    }
-  }
-
-  final case class QueueInstanceNode(qi: QueueInstance, status: String, jobs: Seq[JobNode]) {
-    def jobOwnerMap: Map[String,Seq[String]] = {
-      jobs.distinct.groupBy(_.owner).mapValues(_.map(_.id))
-    }
-    override def toString: String = {
-      s"""queue: $qi $status${jobs.mkString("\n      ","\n      ","")}"""
-    }
-  }
-
-  final case class JobNode(id: String, owner: String)
-
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // functions
-  // -----------------------------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
-  /** Converts `qhost -xml -q -j` output to a cluster tree. It parses the entire XML data structure
-    * in one go.
+  /** Converts `qhost -xml -q -j` output to a cluster tree. It parses the
+    * entire XML data structure in one go.
     *
     * Filtering is done here.
     */
   def snapshotFromQhost(implicit conf: Conf): ClusterTree = {
     val cmd = """qhost -xml -q -j"""
 
-    val xqhost: Elem = XML.loadString(cmd.!!)
+    val xqhost = XML.loadString(cmd.!!)
 
     // do we need to filter?
     val nofilter = conf.hosts.isEmpty && conf.qis.isEmpty
@@ -190,7 +163,8 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
   }
 
   /** Returns a list of messages to explain the given state. */
-  def explain(qi: QueueInstance, state: QueueState): Seq[String] = state match {
+  def explain(qi: QueueInstance, state: QueueState)
+    (implicit conf: Conf): Seq[String] = state match {
 
     case QueueState.ok =>
       List("no problems detected")
@@ -346,29 +320,6 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
     case QueueState.subordinate_suspended => Severity.OK
   }
 
-  // -----------------------------------------------------------------------------------------------
-  // main
-  // -----------------------------------------------------------------------------------------------
-
-  val cluster = snapshotFromQhost
-
-  // bail out early with warning for Nagios
-
-  if (conf.output === Output.Nagios && cluster.hosts.isEmpty) {
-    val message = conf.hosts.size match {
-      case 0 =>
-        s"""usage: qdiagnose-queue -o nagios -h host"""
-
-      case _ =>
-        s"""no queue instances registered at ${conf.hosts.mkString(" ")}"""
-    }
-
-    println(message)
-    exit.warning
-  }
-
-  // output
-
   def needsJobMessage(explanations: Seq[(QueueState, Seq[String])]): Boolean =
     explanations exists {
       case (state,_) =>
@@ -379,83 +330,117 @@ object `qdiagnose-queue` extends App with Environment with Nagios {
         state === QueueState.alarm_suspend
     }
 
-  val severities: Seq[Severity] = for {
-    qinode <- cluster.hosts.flatMap(_.qis)
-    qi     = qinode.qi
-    status = qinode.status
-    jobs   = qinode.jobOwnerMap
+  // -----------------------------------------------------------------------------------------------
+  // data
+  // -----------------------------------------------------------------------------------------------
 
-    stateExplanations =
-      for (state <- QueueState.fromStateString(status)) yield
-        state -> explain(qi, state)
-
-    // here output and getting severities happen at the same time
-    severity <- conf.output match {
-      case Output.CLI =>
-        for {
-          (state, explanations) <- stateExplanations
-          if state =!= QueueState.ok // TODO make configurable
-        } {
-          if (explanations.isEmpty)
-            println(s"$qi $state")
-          else for (explanation <- explanations)
-            println(s"$qi $state $explanation")
-        }
-
-        if (needsJobMessage(stateExplanations)) {
-          val jobmessage = if (jobs.isEmpty)
-            "no jobs"
-          else {
-            val joblist = jobs.mapValues(_.mkString("(", ", ", ")")).mkString(", ")
-            s"""jobs: $joblist"""
-          }
-
-          println(s"$qi $jobmessage")
-        }
-
-        Nil // no need to return severities for CLI output
-
-      case Output.Nagios =>
-        val combined = for {
-          (state, explanations) <- stateExplanations
-          if state =!= QueueState.ok
-        } yield {
-          if (explanations.nonEmpty) {
-            val message = explanations.mkString(start = "(", sep = ", ", end = ")")
-            s"""state=$state $message"""
-          } else
-            s"""state=$state"""
-        }
-
-        val jobMessages = if (needsJobMessage(stateExplanations)) {
-          val message = if (jobs.isEmpty)
-            "no jobs"
-          else {
-            val joblist = jobs.mapValues(_.mkString("(", ", ", ")")).mkString(", ")
-            s"""jobs: $joblist"""
-          }
-
-          List(message)
-        } else Nil
-
-        val _severities = (for ((state,_) <- stateExplanations) yield
-          severity(state)).sortBy(_.value)
-
-        val _severity = _severities.lastOption.getOrElse("")
-
-        println(s"""$qi ${_severity} ${(combined ++ jobMessages).mkString("; ")}""".trim)
-
-        _severities
+  /** Represents a snapshot of the current cluster. */
+  final case class ClusterTree(hosts: Seq[HostNode]) {
+    override def toString: String = {
+      s"""cluster:${hosts.mkString("\n  ","\n  ","\n")}"""
     }
-  } yield severity
-
-  // exit status for Nagios-like monitoring systems
-
-  conf.output match {
-    case Output.CLI =>
-      exit.ok
-
-    case Output.Nagios =>
-      severities.sortBy(_.value).lastOption.getOrElse(Severity.OK).exit()
   }
+
+  final case class HostNode(name: String, qis: Seq[QueueInstanceNode]) {
+    override def toString: String = {
+      s"""host: $name${qis.mkString("\n    ","\n    ","\n")}"""
+    }
+  }
+
+  final case class QueueInstanceNode (
+    qi: QueueInstance,
+    status: String,
+    jobs: Seq[JobNode]
+  ) {
+    def jobOwnerMap: Map[String,Seq[String]] = {
+      jobs.distinct.groupBy(_.owner).mapValues(_.map(_.id))
+    }
+
+    override def toString: String = {
+      s"""queue: $qi $status${jobs.mkString("\n      ","\n      ","")}"""
+    }
+  }
+
+  final case class JobNode(id: String, owner: String)
+
+  // --------------------------------------------------------------------------
+  // configuration
+  // --------------------------------------------------------------------------
+
+  def app = "qdiagnose-queue"
+
+  final case class Conf (
+    debug: Boolean = false,
+    verbose: Boolean = false,
+    output: Output = Output.CLI,
+    hosts: Vector[String] = Vector(),
+    qis: Vector[QueueInstance] = Vector(),
+  ) extends Config
+
+  object Conf extends ConfCompanion {
+    def default = Conf()
+  }
+
+  def parser = new OptionParser[Conf](app) {
+    head(app, BuildInfo.version)
+
+    note("Shows status of queue instances and tries to identify the problems.")
+    note("")
+    note("This tool is Nagios-aware, see examples below.")
+
+    note("\nFILTER\n")
+
+    arg[QueueInstance]("<qi>...")
+      .unbounded()
+      .optional()
+      .action((qi, c) => c.copy(qis = c.qis :+ qi))
+      .text("queue instances to check, defaults to all")
+
+    opt[String]('h', "host")
+      .valueName("<name>")
+      .unbounded()
+      .action((host, c) => c.copy(hosts = c.hosts :+ host))
+      .text("hosts to check, defaults to all")
+
+    note("\nOUTPUT MODES\n")
+
+    opt[Output]('o', "output")
+      .action((output, c) => c.copy(output = output))
+      .text("""output mode, "cli" or "nagios", defaults to "cli"""")
+
+    opt[Unit]("verbose")
+      .action((_, c) => c.copy(verbose = true))
+      .text("show verbose output")
+
+    note("\nOTHER OPTIONS\n")
+
+    opt[Unit]("debug")
+      .hidden()
+      .action((_, c) => c.copy(debug = true))
+      .text("show debug output")
+
+    help('?', "help").text("show this usage text")
+
+    version("version").text("show version")
+
+    note("")
+    note("EXAMPLES")
+    note("")
+    note("  Checks all queue instances:")
+    note("")
+    note("    qdiagnose-queue")
+    note("")
+    note("  Checks all queue instances on host node001 and the queue instance")
+    note("  all.q@node002:")
+    note("")
+    note("    qdiagnose-queue -h node001 all.q@node002")
+    note("")
+    note("  Checks all queue instances on host node001, outputs a single-line")
+    note("  message and uses an exit status that Nagios-like monitoring")
+    note("  systems can interpret (OK, WARNING, CRITICAL, UNKNOWN):")
+    note("")
+    note("    qdiagnose-queue -o nagios -h node001")
+    note("")
+  }
+
 }
