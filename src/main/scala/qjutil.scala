@@ -56,13 +56,13 @@ object qjutil extends GETool with Signal {
       table.alignments(7) = Table.Alignment.Right
       table.alignments(8) = Table.Alignment.Right
 
-      for (job <- jobs) {
+      for (job <- jobs.sortBy(_.utilization)) {
         import job._
 
         if (conf.full || status =!= "OK") {
           table.rows += Sized (
             status, identification, name, user, department, s"$slots",
-            s"$cputime", s"$optimum", utilization
+            s"$cputime", s"$optimum", utilization_human
           )
         }
       }
@@ -94,8 +94,12 @@ object qjutil extends GETool with Signal {
     cputime: Long,
     runtime: Long
   ) extends Utils.Job.Identifiable {
-    def utilization: String = {
-      (cputime.toDouble / slots / runtime).percent(decimals = 1).toString + "%"
+    lazy val utilization: Double = {
+      cputime.toDouble / slots / runtime
+    }
+
+    lazy val utilization_human: String = {
+      utilization.percent(decimals = 1).toString + "%"
     }
 
     lazy val optimum: Long = runtime * slots
