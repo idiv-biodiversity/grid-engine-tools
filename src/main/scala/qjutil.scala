@@ -39,6 +39,7 @@ object qjutil extends GETool with Signal {
 
   def matches(job: Job)(implicit conf: Conf): Boolean = {
     (conf.jids.isEmpty || conf.jids.contains(job.id)) &&
+    (conf.host.fold(true)(_ === job.host)) &&
     (conf.project.fold(true)(_ === job.project)) &&
     (job.runtime > conf.tolerance) &&
     (conf.ignoreSlotsGreaterThan.fold(true)(_ >= job.slots))
@@ -47,21 +48,21 @@ object qjutil extends GETool with Signal {
   object show {
     def human(jobs: Seq[Job])(implicit conf: Conf): Unit = {
       val table = Table(Sized(
-        "stat", "id", "name", "user", "department", "slots", "cputime",
+        "stat", "id", "name", "user", "department", "host", "slots", "cputime",
         "optimum", "util"
       ))
 
-      table.alignments(5) = Table.Alignment.Right
       table.alignments(6) = Table.Alignment.Right
       table.alignments(7) = Table.Alignment.Right
       table.alignments(8) = Table.Alignment.Right
+      table.alignments(9) = Table.Alignment.Right
 
       for (job <- jobs.sortBy(_.utilization)) {
         import job._
 
         if (conf.full || status =!= "OK") {
           table.rows += Sized (
-            status, identification, name, user, department, s"$slots",
+            status, identification, name, user, department, host, s"$slots",
             s"$cputime", s"$optimum", utilization_human
           )
         }
@@ -89,6 +90,7 @@ object qjutil extends GETool with Signal {
     name: String,
     user: String,
     department: String,
+    host: String,
     project: String,
     slots: Int,
     cputime: Long,
@@ -128,6 +130,7 @@ object qjutil extends GETool with Signal {
       val name = (xml \ "JB_name").text
       val user = (xml \ "JB_owner").text
       val department = (xml \ "JB_department").text
+      val host = QueueInstance.unsafe((xml \ "queue_name").text).host
       val project = (xml \ "JB_project").text
       val slots = (xml \ "slots").text.toInt
       val start = df.parse((xml \ "JAT_start_time").text).getTime / 1000
@@ -138,8 +141,8 @@ object qjutil extends GETool with Signal {
 
       cputime match {
         case Some(cputime) =>
-          Some(Job(id, task, name, user, department, project, slots, cputime,
-            runtime))
+          Some(Job(id, task, name, user, department, host, project, slots,
+            cputime, runtime))
 
         case None =>
           val job = Utils.Job.fullID(id, task)
@@ -158,6 +161,7 @@ object qjutil extends GETool with Signal {
   final case class Conf (
     debug: Boolean = false,
     verbose: Boolean = false,
+    host: Option[String] = None,
     project: Option[String] = None,
     short: Boolean = false,
     full: Boolean = false,
@@ -211,6 +215,11 @@ object qjutil extends GETool with Signal {
       .text(s"ignore short jobs, defaults to ${Conf.Default.tolerance}")
 
     note("\nOTHER FILTERS\n")
+
+    opt[String]('h', "host")
+      .valueName("<name>")
+      .action((name, c) => c.copy(host = Some(name)))
+      .text("filter by host")
 
     opt[String]('p', "project")
       .valueName("<name>")
