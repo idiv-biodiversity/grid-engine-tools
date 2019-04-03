@@ -39,7 +39,7 @@ object qjutil extends GETool with Signal {
 
   def matches(job: Job)(implicit conf: Conf): Boolean = {
     (conf.jids.isEmpty || conf.jids.contains(job.id)) &&
-    (conf.host.fold(true)(_ === job.host)) &&
+    (conf.hosts.isEmpty || conf.hosts.contains(job.host)) &&
     (conf.project.fold(true)(_ === job.project)) &&
     (job.runtime > conf.tolerance) &&
     (conf.ignoreSlotsGreaterThan.fold(true)(_ >= job.slots))
@@ -161,7 +161,7 @@ object qjutil extends GETool with Signal {
   final case class Conf (
     debug: Boolean = false,
     verbose: Boolean = false,
-    host: Option[String] = None,
+    hosts: Seq[String] = Vector(),
     project: Option[String] = None,
     short: Boolean = false,
     full: Boolean = false,
@@ -217,8 +217,9 @@ object qjutil extends GETool with Signal {
     note("\nOTHER FILTERS\n")
 
     opt[String]('h', "host")
+      .unbounded()
       .valueName("<name>")
-      .action((name, c) => c.copy(host = Some(name)))
+      .action((host, c) => c.copy(hosts = c.hosts :+ host, user = Some("*")))
       .text("filter by host")
 
     opt[String]('p', "project")
