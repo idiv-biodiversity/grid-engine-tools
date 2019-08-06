@@ -139,15 +139,23 @@ object qjutil extends GETool with Signal {
         .filter(_ =!= "")
         .map(_.toLong)
 
-      cputime match {
-        case Some(cputime) =>
-          Some(Job(id, task, name, user, department, host, project, slots,
-            cputime, runtime))
+      val state = (xml \ "state").text
 
-        case None =>
-          val job = Utils.Job.fullID(id, task)
-          log.verbose(s"""dropping $job: no "cpu_usage" value""")
-          None
+      if (state contains "d") {
+        val job = Utils.Job.fullID(id, task)
+        log.verbose(s"""dropping $job: marked deleted (state=$state)""")
+        None
+      } else {
+        cputime match {
+          case Some(cputime) =>
+            Some(Job(id, task, name, user, department, host, project, slots,
+              cputime, runtime))
+
+          case None =>
+            val job = Utils.Job.fullID(id, task)
+            log.verbose(s"""dropping $job: no "cpu_usage" value""")
+            None
+        }
       }
     }
   }
