@@ -1,5 +1,6 @@
 package grid.engine
 
+import cats.instances.int._
 import scala.sys.process._
 import scalax.cli.Memory
 
@@ -25,21 +26,31 @@ object `qquota-nice` extends GETool {
     val entries: Seq[(String, ResourceEntry)] = for {
       rule <- xml \\ "qquota_rule"
       rulename = (rule \ "@name").text
-      user = (rule \ "users").text
+      projects = (rule \ "projects").map(_.text).toList
+      users = (rule \ "users").map(_.text).toList
       limitxml = (rule \ "limit")
       resource = (limitxml \ "@resource").text
       limit = (limitxml \ "@limit").text
       value = (limitxml \ "@value").text
     } yield {
+      val subjects: Subjects = if (projects.nonEmpty)
+        Projects(projects)
+      else if (users.nonEmpty)
+        Users(users)
+      else {
+        Console.err.println("neither users nor projects")
+        sys.exit(1)
+      }
+
       val entry = resource match {
         case "h_rt" =>
-          new TimeEntry(user, resource, limit, value)
+          new TimeEntry(subjects, resource, limit, value)
 
         case "h_vmem" =>
-          new MemoryEntry(user, resource, limit, value)
+          new MemoryEntry(subjects, resource, limit, value)
 
         case "slots" =>
-          new NumberEntry(user, resource, limit.toDouble, value.toDouble)
+          new NumberEntry(subjects, resource, limit.toDouble, value.toDouble)
       }
 
       (rulename, entry)
@@ -54,7 +65,7 @@ object `qquota-nice` extends GETool {
       // TODO add colors
       for ((_, entry) ← entries.sortBy(- _._2.value)) {
         import entry._
-        table.rows += Sized(user, resource, humanValue, humanLimit)
+        table.rows += Sized(subjects.pretty, resource, humanValue, humanLimit)
       }
 
       table.print()
@@ -74,8 +85,31 @@ object `qquota-nice` extends GETool {
       ""
   }
 
+  trait Subjects {
+    def names: List[String]
+    def pretty: String
+  }
+
+  final case class Projects(names: List[String]) extends Subjects {
+    def pretty = {
+      if (names.size === 1)
+        s"project ${names.head}"
+      else
+        s"projects ${names.mkString(" ")}"
+    }
+  }
+
+  final case class Users(names: List[String]) extends Subjects {
+    def pretty = {
+      if (names.size === 1)
+        s"user ${names.head}"
+      else
+        s"users ${names.mkString(" ")}"
+    }
+  }
+
   trait ResourceEntry {
-    def user: String
+    def subjects: Subjects
     def resource: String
     def limit: Double
     def value: Double
@@ -84,7 +118,7 @@ object `qquota-nice` extends GETool {
   }
 
   final case class NumberEntry (
-    user: String,
+    subjects: Subjects,
     resource: String,
     limit: Double,
     value: Double,
@@ -94,7 +128,7 @@ object `qquota-nice` extends GETool {
   }
 
   final case class MemoryEntry (
-    user: String,
+    subjects: Subjects,
     resource: String,
     inputLimit: String,
     inputValue: String,
@@ -106,7 +140,7 @@ object `qquota-nice` extends GETool {
   }
 
   final case class TimeEntry (
-    user: String,
+    subjects: Subjects,
     resource: String,
     humanLimit: String,
     humanValue: String,
